@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech Analyzer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <nav class="navbar">
+            <div class="nav-brand">
+                <a href="index.html" style="text-decoration: none; color: inherit;">speech analyzer ai</a>
+                <span id="modeBadge" class="mode-badge" style="display: none;"></span>
+            </div>
+            <div class="nav-links">
+                <a href="index.html" class="nav-link active">Dashboard</a>
+                <a href="practice.html" class="nav-link">Practice</a>
+            </div>
+            <button id="themeToggle" class="theme-toggle" title="Toggle Light/Dark Mode">
+                <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+            </button>
+        </nav>
+
+
+
+            <div class="dashboard-grid">
+                <!-- Column 1: Transcription & Feedback -->
+                <div class="dashboard-col col-transcription">
+                    <div class="controls-card">
+                        <button id="startBtn" class="btn btn-primary">Start Recording</button>
+                        <button id="stopBtn" class="btn btn-stop" disabled>Stop Recording</button>
+                        <div class="status-bar">
+                            <div class="status-indicator">
+                                <div class="dot" id="recordingDot"></div>
+                                <span id="statusText">Ready to record</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="transcript-wrapper">
+                        <div class="glass-panel">
+                            <div id="transcript" class="transcript-final"></div>
+                            <span id="currentTurn" class="transcript-partial"></span>
+                        </div>
+                    </div>
+
+                    <div class="grammar-panel" id="diffContainer" style="display: none;">
+                        <div class="filler-header"><span class="filler-label">Analyzed Diff</span></div>
+                        <div id="diffPanel" class="diff-list"></div>
+                    </div>
+
+                    <div class="grammar-panel" id="grammarPanel">
+                        <div class="filler-header">
+                            <span class="filler-label">Grammar Issues</span>
+                            <span class="grammar-status" id="grammarChecking"></span>
+                        </div>
+                        <div id="grammarList" class="grammar-list">
+                            <span class="grammar-empty">Issues will appear here.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Column 2: Metrics & Overview -->
+                <div class="dashboard-col col-metrics">
+                    <div class="metrics-container">
+                        <div class="metrics-layout">
+                            <div class="stats-grid">
+                                <div class="stat-card"><span class="stat-label">Words</span><span class="stat-value" id="statWords">0</span></div>
+                                <div class="stat-card"><span class="stat-label">Duration</span><span class="stat-value" id="statDuration">0:00</span></div>
+                                <div class="stat-card"><span class="stat-label">WPM</span><span class="stat-value" id="statWpm">—</span></div>
+                                <div class="stat-card"><span class="stat-label">Errors</span><span class="stat-value" id="statGrammar">0</span></div>
+                            </div>
+                            <div class="stat-card stat-card-fluency">
+                                <span class="stat-label">Fluency</span>
+                                <div class="gauge-container">
+                                    <div class="gauge-circle">
+                                        <svg viewBox="0 0 36 36" class="gauge-svg">
+                                            <path class="gauge-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                            <path id="gaugeProgress" class="gauge-progress" stroke-dasharray="100, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                        </svg>
+                                        <span class="stat-value" id="statFluency">100</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="filler-panel" id="fillerPanel">
+                        <div class="filler-header">
+                            <span class="filler-label">Breakdown</span>
+                            <span class="filler-total" id="fillerTotal">0 total</span>
+                        </div>
+                        <div class="filler-pills" id="fillerPills">
+                            <div class="pill" id="pill-um">um <span class="pill-count" id="count-um">0</span></div>
+                            <div class="pill" id="pill-uh">uh <span class="pill-count" id="count-uh">0</span></div>
+                            <div class="pill" id="pill-like">like <span class="pill-count" id="count-like">0</span></div>
+                            <div class="pill" id="pill-actually">actually <span class="pill-count" id="count-actually">0</span></div>
+                            <div class="pill" id="pill-basically">basically <span class="pill-count" id="count-basically">0</span></div>
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <span class="filler-label">Pace Over Time</span>
+                        <div class="chart-container"><canvas id="paceChart"></canvas></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

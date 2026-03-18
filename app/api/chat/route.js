@@ -1,0 +1,63 @@
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { ElevenLabsClient } from '@elevenlabs/elevenlabs-js';
+
+export async function POST(request) {
+  try {
+    const { transcript, mode } = await request.json();
+
+    if (!transcript) {
+      return Response.json({ error: 'No transcript provided' }, { status: 400 });
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+      return Response.json({ error: 'GEMINI_API_KEY is not configured' }, { status: 500 });
+    }
+
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+    let prompt = `You are an AI conversational partner chatting directly with the user. Keep the flow continuous and engaging.\n\n`;
+    prompt += `User just said:\n"${transcript}"\n\n`;
+
+    prompt += `Instruction: Respond with exactly ONE short, natural sentence (under 15 words) reacting to their speech, followed immediately by ONE engaging follow-up question to keep them talking. Be extremely concise. Do not write paragraphs.\n`;
+
+    if (mode === 'interview') {
+      prompt += `Context: You are the interviewer. Act like a hiring manager and ask the next interview question.`;
+    } else if (mode === 'sales') {
+      prompt += `Context: You are a potential client. Ask a question about their product or pitch.`;
+    } else if (mode === 'public-speaking') {
+      prompt += `Context: You are a speaking coach. Ask them to clarify or expand on their main point.`;
+    } else {
+      prompt += `Context: Friendly chat. Ask a natural follow-up question to continue the conversation.`;
+    }
+
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text();
+
+    let audioBase64 = null;
+    if (process.env.ELEVENLABS_API_KEY) {
+      try {
+        const elevenlabs = new ElevenLabsClient({ apiKey: process.env.ELEVENLABS_API_KEY });
+        const audioStream = await elevenlabs.textToSpeech.convert('JBFqnCBsd6RMkjVDRZzb', {
+          text: responseText,
+          model_id: 'eleven_multilingual_v2',
+          output_format: 'mp3_44100_128',
+        });
+
+        const chunks = [];
+        for await (const chunk of audioStream) {
+          chunks.push(chunk);
+        }
+        audioBase64 = Buffer.concat(chunks).toString('base64');
+      } catch (audioErr) {
+        console.error('ElevenLabs TTS Error:', audioErr);
+      }
+    }
+
+    return Response.json({ response: responseText, audioBase64 });
+
+  } catch (error) {
+    console.error('Gemini API Error:', error);
+    return Response.json({ error: 'Failed to generate response', details: error.message }, { status: 500 });
+  }
+}
