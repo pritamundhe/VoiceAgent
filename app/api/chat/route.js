@@ -14,7 +14,7 @@ export async function POST(request) {
     }
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     let prompt = `You are an AI conversational partner chatting directly with the user. Keep the flow continuous and engaging.\n\n`;
     prompt += `User just said:\n"${transcript}"\n\n`;
