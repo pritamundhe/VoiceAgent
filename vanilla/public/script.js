@@ -26,6 +26,12 @@ let mediaStream = null;
 let scriptProcessor = null;
 let proxyReady = false;
 
+// ── Silence-detection state ────────────────────────────────────────────────
+// Transcription is only committed after SILENCE_THRESHOLD ms of no new speech.
+const SILENCE_THRESHOLD = 4000; // 4 seconds
+let silenceTimer = null;         // setTimeout handle
+let pendingFinalText = '';       // accumulated final text waiting to be committed
+
 // Filler state
 let fillerCounts = {};
 let totalFillers = 0;
@@ -120,6 +126,10 @@ const resetStats = () => {
     
     transcriptSegments = [];
     segmentCounter = 0;
+
+    // Reset silence-detection state
+    if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+    pendingFinalText = '';
 
     const diffPanel = document.getElementById('diffPanel');
     const diffContainer = document.getElementById('diffContainer');
@@ -361,11 +371,12 @@ const checkGrammar = async (text, segmentIndex) => {
 let nextFlushIndex = 0;
 const flushSegments = () => {
     while (transcriptSegments[nextFlushIndex] && transcriptSegments[nextFlushIndex].processed) {
-        transcriptEl.innerHTML += transcriptSegments[nextFlushIndex].html + ' ';
+        // Prepend each segment so newest appears at the top
+        transcriptEl.insertAdjacentHTML(
+            'afterbegin',
+            `<div class="transcript-segment">${transcriptSegments[nextFlushIndex].html}</div>`
+        );
         nextFlushIndex++;
-        // Scroll to bottom
-        const wrapper = transcriptEl.parentElement;
-        wrapper.scrollTop = wrapper.scrollHeight;
     }
 };
 
@@ -375,7 +386,42 @@ const escapeHtml = (str) => str
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
+/**
+ * Commit whatever pendingFinalText has accumulated: run grammar check,
+ * update word count & fillers, and clear the pending buffer.
+ */
+const commitPending = () => {
+    if (!pendingFinalText.trim()) return;
+    const text = pendingFinalText.trim();
+    pendingFinalText = '';
+
+    countFillers(text);
+    updateWordCount(text);
+
+    const currentIndex = segmentCounter++;
+    checkGrammar(text, currentIndex);
+
+    // Clear the live preview
+    currentTurnEl.textContent = '';
+};
+
+/**
+ * Reset (or start) the silence countdown.
+ * Called whenever any speech activity is detected (interim or final).
+ */
+const resetSilenceTimer = () => {
+    if (silenceTimer) clearTimeout(silenceTimer);
+    silenceTimer = setTimeout(() => {
+        silenceTimer = null;
+        commitPending();
+    }, SILENCE_THRESHOLD);
+};
+
 const cleanup = () => {
+    // Flush any pending final text immediately on stop
+    if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+    commitPending();
+
     stopBtn.disabled = true;
     startBtn.disabled = false;
     proxyReady = false;
@@ -472,17 +518,20 @@ startBtn.addEventListener('click', async () => {
                 const isFinal = message.turn_is_formatted === true;
 
                 if (isFinal && text) {
-                    // Count fillers and update word count
-                    countFillers(text);
-                    updateWordCount(text);
+                    // Accumulate final text — but DON'T commit yet.
+                    // Keep appending so multi-sentence turns are captured fully.
+                    pendingFinalText = text;
 
-                    // Start grammar check with assigned index
-                    const currentIndex = segmentCounter++;
-                    checkGrammar(text, currentIndex);
+                    // Show the finalised text in the live preview while waiting
+                    currentTurnEl.textContent = '⏳ ' + text;
 
-                    currentTurnEl.textContent = '';
-                } else {
+                    // Any speech activity resets the silence countdown
+                    resetSilenceTimer();
+
+                } else if (text) {
+                    // Interim/partial result — show live, reset silence timer
                     currentTurnEl.textContent = text;
+                    resetSilenceTimer();
                 }
 
             } else if (message.type === 'Termination') {

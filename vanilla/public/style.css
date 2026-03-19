@@ -458,19 +458,24 @@ body {
     border-radius: 14px;
     padding: 1rem;
     min-height: 200px;
-    line-height: 1.7;
     overflow-y: auto;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 0.35rem;
 }
 
 .transcript-final {
     font-size: 1.05rem;
     color: var(--text);
+    line-height: 1.7;
 }
 
 .transcript-partial {
     font-size: 1.05rem;
     color: var(--text-muted);
     font-style: italic;
+    /* Stick the live preview at the very top (visually) */
+    order: -1;
 }
 
 /* Filler word highlight inside transcript */
@@ -480,6 +485,15 @@ mark.filler {
     font-weight: 700;
     border-bottom: 2px solid #fff;
     padding-bottom: 1px;
+}
+
+/* Each committed transcript entry */
+.transcript-segment {
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+.transcript-segment:last-child {
+    border-bottom: none;
 }
 
 /* ── Grammar Panel ── */
