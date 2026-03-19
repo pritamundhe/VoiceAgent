@@ -36,9 +36,11 @@ function DashboardContent() {
     fetchAiFeedback
   } = useRecorder(mode, currentPrompt);
 
-  const handleStopRecording = async () => {
+  const handleStopRecording = () => {
       stopRecording();
-      
+  };
+
+  const handleEndSession = async () => {
       const fullTranscript = (
           chatHistory
             .filter(m => m.role === 'user')
@@ -240,6 +242,16 @@ function DashboardContent() {
             >
               Stop Recording
             </button>
+            {(!isRecording && (transcript || chatHistory.length > 0)) && (
+              <button 
+                className="btn btn-primary" 
+                style={{ background: '#69db7c', color: '#000' }}
+                onClick={handleEndSession}
+                disabled={isAnalyzingSession}
+              >
+                {isAnalyzingSession ? 'Analyzing...' : 'End Session & Report'}
+              </button>
+            )}
             <div className="status-bar">
               <div className="status-indicator">
                 <div className={`dot ${isRecording ? 'recording' : ''}`}></div>
@@ -265,16 +277,14 @@ function DashboardContent() {
 
           <div className="glass-panel transcript-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', overflowY: 'auto' }}>
             
-            {chatHistory.map((msg, idx) => (
-              <div key={idx} className={`chat-message ${msg.role}`}>
-                <span style={{ fontSize: '0.85rem', color: '#69db7c', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>
-                    {msg.role === 'ai' ? 'OpenAI AI Coach' : 'You'}
-                </span>
-                <div style={{ fontSize: msg.role === 'ai' ? '1.1rem' : '1.05rem', lineHeight: '1.6', color: 'var(--text)', margin: 0 }}>
-                    {msg.content}
+            {isAnalyzingAI && (
+              <div className="chat-message ai">
+                <span style={{ fontSize: '0.85rem', color: '#69db7c', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>OpenAI AI Coach</span>
+                <div style={{ fontSize: '1.1rem', lineHeight: '1.6', color: 'var(--text)' }}>
+                  <span style={{ fontStyle: 'italic', opacity: 0.7 }}>Typing response...</span>
                 </div>
               </div>
-            ))}
+            )}
 
             {(transcript || currentTurn) && (
               <div className="chat-message user">
@@ -296,14 +306,16 @@ function DashboardContent() {
               </div>
             )}
 
-            {isAnalyzingAI && (
-              <div className="chat-message ai">
-                <span style={{ fontSize: '0.85rem', color: '#69db7c', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>OpenAI AI Coach</span>
-                <div style={{ fontSize: '1.1rem', lineHeight: '1.6', color: 'var(--text)' }}>
-                  <span style={{ fontStyle: 'italic', opacity: 0.7 }}>Typing response...</span>
+            {[...chatHistory].reverse().map((msg, idx) => (
+              <div key={idx} className={`chat-message ${msg.role}`}>
+                <span style={{ fontSize: '0.85rem', color: '#69db7c', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>
+                    {msg.role === 'ai' ? 'OpenAI AI Coach' : 'You'}
+                </span>
+                <div style={{ fontSize: msg.role === 'ai' ? '1.1rem' : '1.05rem', lineHeight: '1.6', color: 'var(--text)', margin: 0 }}>
+                    {msg.content}
                 </div>
               </div>
-            )}
+            ))}
             
           </div>
         </section>
@@ -371,19 +383,17 @@ function DashboardContent() {
             </div>
           </div>
 
-
-
-          <div className="grammar-panel">
+          <div className="grammar-panel" style={{ borderLeft: '4px solid #ff6b6b' }}>
             <span className="filler-label">Grammar Suggestions</span>
-            <div className="grammar-list">
+            <div className="grammar-list" style={{ marginTop: '0.5rem' }}>
               {grammarSuggestions.length === 0 ? (
                 <div className="grammar-empty">No suggestions yet. Start speaking!</div>
               ) : (
                 grammarSuggestions.map((s, i) => (
-                  <div key={i} className="grammar-item">
-                    <span className="grammar-bad">{s.bad}</span>
-                    {s.fix && <><span className="grammar-arrow">→</span><span className="grammar-fix">{s.fix}</span></>}
-                    <span className="grammar-msg">{s.msg}</span>
+                  <div key={i} className="grammar-item" style={{ padding: '0.75rem', background: 'var(--surface-2)', borderRadius: '8px', marginBottom: '0.5rem' }}>
+                    <span className="grammar-bad" style={{ color: '#ff6b6b', textDecoration: 'line-through', fontWeight: 'bold' }}>{s.bad}</span>
+                    {s.fix && <><span className="grammar-arrow" style={{ margin: '0 0.5rem', color: 'var(--text-muted)' }}>→</span><span className="grammar-fix" style={{ color: '#69db7c', fontWeight: 'bold' }}>{s.fix}</span></>}
+                    <p className="grammar-msg" style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginBottom: 0 }}>{s.msg}</p>
                   </div>
                 ))
               )}

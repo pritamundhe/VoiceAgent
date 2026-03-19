@@ -34,6 +34,10 @@ export default function useRecorder(mode = '', prompt = '') {
     const startTimeRef = useRef(null);
     const durationIntervalRef = useRef(null);
     const pauseTimeoutRef = useRef(null);
+    
+    // Accumulate distinct sentences so they aren't overwritten
+    const committedTurnsRef = useRef([]);
+    const lastTurnTextRef = useRef('');
 
     const cleanup = useCallback(() => {
         setIsRecording(false);
@@ -134,18 +138,15 @@ export default function useRecorder(mode = '', prompt = '') {
 
     const startRecording = useCallback(async () => {
         try {
+            // DO NOT reset session states here—allow resuming!
+            // E.g. we want to keep totalWords, duration, chatHistory, etc.
+            
+            // We just reset transcript and currentTurn so AssemblyAI starts a fresh block 
+            // of text for this specific recording burst, but we leave the chatHistory alone
             setTranscript('');
             setCurrentTurn('');
-            setFillerCounts(Object.fromEntries(FILLER_WORDS.map(w => [w, 0])));
-            setTotalFillers(0);
-            setTotalWords(0);
-            setDuration(0);
-            setWpm(0);
-            setGrammarErrors(0);
-            setGrammarSuggestions([]);
-            setPaceHistory({ labels: [], data: [] });
-            setFluency(100);
-            setChatHistory([]);
+            committedTurnsRef.current = [];
+            lastTurnTextRef.current = '';
             setStatus('Connecting...');
 
             const wsUrl = `ws://${window.location.hostname}:3000/`;
@@ -185,8 +186,12 @@ export default function useRecorder(mode = '', prompt = '') {
                         setIsRecording(true);
                         setStatus('Recording...');
                         startTimeRef.current = Date.now();
+                        
+                        // Capture the current duration so we can add to it instead of overwriting
+                        const initialDuration = duration;
+                        
                         durationIntervalRef.current = setInterval(() => {
-                            setDuration(Math.floor((Date.now() - startTimeRef.current) / 1000));
+                            setDuration(initialDuration + Math.floor((Date.now() - startTimeRef.current) / 1000));
                         }, 1000);
                     } catch (err) {
                         alert('Could not access microphone: ' + err.message);
@@ -198,11 +203,33 @@ export default function useRecorder(mode = '', prompt = '') {
 
                     if (text) {
                         if (isFinal) {
-                            setTranscript(prev => prev + text.trim() + ' ');
+                            const trimmedText = text.trim();
+                            const prevText = lastTurnTextRef.current;
+                            let isNewTurn = false;
+                            
+                            if (prevText.length > 0) {
+                                // AssemblyAI often sends an expanding string for one continuous thought.
+                                // If the incoming text shrinks dramatically, or completely changes, it's a new thought/turn.
+                                if (trimmedText.length < prevText.length - 15) {
+                                    isNewTurn = true;
+                                } else if (!trimmedText.toLowerCase().includes(prevText.substring(0, 10).toLowerCase())) {
+                                    isNewTurn = true;
+                                }
+                            }
+                            
+                            if (isNewTurn) {
+                                committedTurnsRef.current.push(prevText);
+                            }
+                            
+                            lastTurnTextRef.current = trimmedText;
+                            
+                            const fullDisplay = [...committedTurnsRef.current, trimmedText].join(' ');
+                            setTranscript(fullDisplay);
+                            
                             setCurrentTurn('');
-                            if (typeof countFillers === 'function') countFillers(text);
-                            if (typeof updateWordCount === 'function') updateWordCount(text);
-                            checkGrammar(text);
+                            if (typeof countFillers === 'function') countFillers(trimmedText);
+                            if (typeof updateWordCount === 'function') updateWordCount(trimmedText);
+                            checkGrammar(trimmedText);
                         } else {
                             setCurrentTurn(text);
                         }
@@ -260,7 +287,7 @@ export default function useRecorder(mode = '', prompt = '') {
         }
     }, []);
 
-    // 3-second Pause Trigger
+    // 6-second Pause Trigger
     useEffect(() => {
         if (!isRecording || !transcript.trim()) return;
 
@@ -270,8 +297,10 @@ export default function useRecorder(mode = '', prompt = '') {
             const currentText = transcript;
             setChatHistory(prev => [...prev, { role: 'user', content: currentText.trim() }]);
             setTranscript('');
+            committedTurnsRef.current = [];
+            lastTurnTextRef.current = '';
             fetchAiFeedback(currentText, mode, prompt);
-        }, 3000);
+        }, 6000);
 
         return () => {
             if (pauseTimeoutRef.current) clearTimeout(pauseTimeoutRef.current);
