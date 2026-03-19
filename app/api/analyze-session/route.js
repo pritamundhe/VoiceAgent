@@ -1,5 +1,10 @@
-import { generateDeepSeekContent } from '../../../lib/deepseek';
+import { generateOpenAIContent } from '../../../lib/openai';
 import { calculateMetrics } from '../../../lib/analytics';
+import dbConnect from '@/lib/mongodb';
+import Session from '@/models/Session';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_change_me';
 
 export async function POST(request) {
     try {
@@ -15,9 +20,9 @@ export async function POST(request) {
             return Response.json({ error: 'Failed to calculate metrics' }, { status: 500 });
         }
 
-        // 2. Core DeepSeek Analysis
-        if (!process.env.DEEPSEEK_API_KEY) {
-            return Response.json({ error: 'DEEPSEEK_API_KEY not configured' }, { status: 500 });
+        // 2. Core OpenAI Analysis
+        if (!process.env.OPENAI_API_KEY) {
+            return Response.json({ error: 'OPENAI_API_KEY not configured' }, { status: 500 });
         }
 
         const aiPrompt = `
@@ -43,7 +48,7 @@ export async function POST(request) {
         Return ONLY the JSON. No conversational text.
         `;
 
-        const aiResponseText = await generateDeepSeekContent(aiPrompt, { model: 'deepseek-chat' });
+        const aiResponseText = await generateOpenAIContent(aiPrompt, { model: 'gpt-4o-mini' });
         
         let aiAnalysis;
         try {
@@ -64,6 +69,33 @@ export async function POST(request) {
         console.log(`   - Topic: ${aiAnalysis.topic}`);
         console.log(`   - Fluency Score: ${metrics.fluencyScore}`);
         console.log(`   - Words: ${metrics.totalWords}\n`);
+
+        // 3. Persist to MongoDB
+        try {
+            await dbConnect();
+            const token = request.cookies.get('token')?.value;
+            if (token) {
+                const decoded = jwt.verify(token, JWT_SECRET);
+                const userId = decoded.userId;
+
+                const newSession = new Session({
+                    userId,
+                    transcript,
+                    mode,
+                    prompt: userPrompt,
+                    metrics,
+                    aiAnalysis,
+                    timestamp: new Date()
+                });
+
+                await newSession.save();
+                console.log(`   - Session saved to DB for user: ${userId}`);
+            } else {
+                console.warn('   - No auth token found, session not saved to DB.');
+            }
+        } catch (dbErr) {
+            console.error('   - Failed to save session to DB:', dbErr.message);
+        }
 
         return Response.json({
             metrics,

@@ -49,6 +49,7 @@ export default function Navbar({ mode }) {
             <div className="nav-links">
                 <Link href="/" className={`nav-link ${pathname === '/' ? 'active' : ''}`}>Home</Link>
                 <Link href="/practice" className={`nav-link ${pathname === '/practice' ? 'active' : ''}`}>Practice</Link>
+                <Link href="/analytics" className={`nav-link ${pathname === '/analytics' ? 'active' : ''}`}>Analytics</Link>
             </div>
 
             <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>

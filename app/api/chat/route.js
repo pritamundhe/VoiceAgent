@@ -1,4 +1,4 @@
-import { generateDeepSeekContent } from '../../../lib/deepseek';
+import { generateOpenAIContent } from '../../../lib/openai';
 import { ElevenLabsClient } from '@elevenlabs/elevenlabs-js';
 
 export async function POST(request) {
@@ -9,8 +9,8 @@ export async function POST(request) {
       return Response.json({ error: 'No transcript provided' }, { status: 400 });
     }
 
-    if (!process.env.DEEPSEEK_API_KEY) {
-      return Response.json({ error: 'DEEPSEEK_API_KEY is not configured' }, { status: 500 });
+    if (!process.env.OPENAI_API_KEY) {
+      return Response.json({ error: 'OPENAI_API_KEY is not configured' }, { status: 500 });
     }
 
     let prompt = `You are an AI conversational partner chatting directly with the user. Keep the flow continuous and engaging.\n\n`;
@@ -32,7 +32,7 @@ export async function POST(request) {
       prompt += `Context: Friendly chat. Ask a natural follow-up question to continue the conversation.`;
     }
 
-    const responseText = await generateDeepSeekContent(prompt, { model: 'deepseek-chat' });
+    const responseText = await generateOpenAIContent(prompt, { model: 'gpt-4o-mini' });
 
     let audioBase64 = null;
     if (process.env.ELEVENLABS_API_KEY) {
@@ -57,7 +57,7 @@ export async function POST(request) {
     return Response.json({ response: responseText, audioBase64 });
 
   } catch (error) {
-    console.error('DeepSeek API Error:', error);
+    console.error('OpenAI API Error:', error);
     return Response.json({ error: 'Failed to generate response', details: error.message }, { status: 500 });
   }
 }
