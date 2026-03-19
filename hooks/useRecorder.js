@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 const SAMPLE_RATE = 16000;
 const FILLER_WORDS = ['um', 'uh', 'like', 'actually', 'basically'];
 
-export default function useRecorder(mode = '') {
+export default function useRecorder(mode = '', prompt = '') {
     const [isRecording, setIsRecording] = useState(false);
     const [status, setStatus] = useState('Ready to record');
     const [transcript, setTranscript] = useState('');
@@ -80,11 +80,12 @@ export default function useRecorder(mode = '') {
 
     const checkGrammar = useCallback(async (text) => {
         try {
-            const res = await fetch('http://localhost:3000/api/grammar', {
+            const res = await fetch('/api/grammar', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text })
+                body: JSON.stringify({ text }),
             });
+            if (!res.ok) throw new Error('Grammar service returned ' + res.status);
             const { matches } = await res.json();
             if (matches && matches.length > 0) {
                 setGrammarErrors(prev => prev + matches.length);
@@ -195,14 +196,16 @@ export default function useRecorder(mode = '') {
                     const text = message.transcript || '';
                     const isFinal = message.turn_is_formatted === true;
 
-                    if (isFinal && text) {
-                        setTranscript(prev => prev + text + ' ');
-                        setCurrentTurn('');
-                        countFillers(text);
-                        updateWordCount(text);
-                        checkGrammar(text);
-                    } else {
-                        setCurrentTurn(text);
+                    if (text) {
+                        if (isFinal) {
+                            setTranscript(prev => prev + text.trim() + ' ');
+                            setCurrentTurn('');
+                            if (typeof countFillers === 'function') countFillers(text);
+                            if (typeof updateWordCount === 'function') updateWordCount(text);
+                            checkGrammar(text);
+                        } else {
+                            setCurrentTurn(text);
+                        }
                     }
                 } else if (message.type === 'Termination') {
                     cleanup();
@@ -222,14 +225,18 @@ export default function useRecorder(mode = '') {
         cleanup();
     }, [cleanup]);
 
-    const fetchAiFeedback = useCallback(async (recordedTranscript, currentMode = '') => {
+    const fetchAiFeedback = useCallback(async (recordedTranscript, currentMode = '', currentPrompt = '') => {
         if (!recordedTranscript || recordedTranscript.trim().length === 0) return;
         setIsAnalyzingAI(true);
         try {
             const res = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ transcript: recordedTranscript, mode: currentMode })
+                body: JSON.stringify({ 
+                    transcript: recordedTranscript, 
+                    mode: currentMode,
+                    prompt: currentPrompt
+                })
             });
             const data = await res.json();
             if (data.response) {
@@ -263,13 +270,13 @@ export default function useRecorder(mode = '') {
             const currentText = transcript;
             setChatHistory(prev => [...prev, { role: 'user', content: currentText.trim() }]);
             setTranscript('');
-            fetchAiFeedback(currentText, mode);
+            fetchAiFeedback(currentText, mode, prompt);
         }, 3000);
 
         return () => {
             if (pauseTimeoutRef.current) clearTimeout(pauseTimeoutRef.current);
         };
-    }, [transcript, isRecording, fetchAiFeedback, mode]);
+    }, [transcript, isRecording, fetchAiFeedback, mode, prompt]);
 
     return {
         isRecording,

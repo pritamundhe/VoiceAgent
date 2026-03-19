@@ -3,7 +3,7 @@ import { ElevenLabsClient } from '@elevenlabs/elevenlabs-js';
 
 export async function POST(request) {
   try {
-    const { transcript, mode } = await request.json();
+    const { transcript, mode, prompt: userPrompt } = await request.json();
 
     if (!transcript) {
       return Response.json({ error: 'No transcript provided' }, { status: 400 });
@@ -19,7 +19,11 @@ export async function POST(request) {
     let prompt = `You are an AI conversational partner chatting directly with the user. Keep the flow continuous and engaging.\n\n`;
     prompt += `User just said:\n"${transcript}"\n\n`;
 
-    prompt += `Instruction: Respond with exactly ONE short, natural sentence (under 15 words) reacting to their speech, followed immediately by ONE engaging follow-up question to keep them talking. Be extremely concise. Do not write paragraphs.\n`;
+    prompt += `Instruction: Respond with exactly ONE short, natural sentence (under 20 words) reacting to their speech, followed immediately by ONE engaging follow-up question or coaching tip to keep them talking. Be extremely concise. Do not write paragraphs.\n`;
+
+    if (userPrompt) {
+      prompt += `Context: The user is currently responding to this specific prompt: "${userPrompt}". Your feedback should relate to how well they addressed it if applicable.\n`;
+    }
 
     if (mode === 'interview') {
       prompt += `Context: You are the interviewer. Act like a hiring manager and ask the next interview question.`;

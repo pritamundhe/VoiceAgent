@@ -1,14 +1,19 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Navbar from '../../components/Navbar';
 import useRecorder from '../../hooks/useRecorder';
 import PaceChart from '../../components/PaceChart';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { MODES } from '../../lib/modes';
 
 function DashboardContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const mode = searchParams.get('mode') || '';
+  const [currentPrompt, setCurrentPrompt] = useState('');
+  const [isAnalyzingSession, setIsAnalyzingSession] = useState(false);
 
   const {
     isRecording,
@@ -29,12 +34,70 @@ function DashboardContent() {
     startRecording,
     stopRecording,
     fetchAiFeedback
-  } = useRecorder();
+  } = useRecorder(mode, currentPrompt);
 
-  const handleStopRecording = () => {
+  const handleStopRecording = async () => {
       stopRecording();
-      if (transcript) {
-          fetchAiFeedback(transcript, mode);
+      
+      const fullTranscript = (transcript + ' ' + (currentTurn || '')).trim();
+
+      // If we have a transcript, trigger deep analysis
+      if (fullTranscript.length > 0) {
+          console.log('[Dashboard] Starting session analysis...', { transcriptLength: fullTranscript.length, duration, mode });
+          setIsAnalyzingSession(true);
+          try {
+              const res = await fetch('/api/analyze-session', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                      transcript: fullTranscript, 
+                      duration: duration || 1, 
+                      mode, 
+                      prompt: currentPrompt 
+                  })
+              });
+              
+              if (!res.ok) {
+                  const errorText = await res.text();
+                  throw new Error(`API Error (${res.status}): ${errorText}`);
+              }
+
+              const data = await res.json();
+              console.log('[Dashboard] Analysis complete:', data);
+
+              if (data.metrics) {
+                  const reportData = {
+                      ...data,
+                      transcript: fullTranscript,
+                      modeTitle: selectedMode?.title || 'General Practice'
+                  };
+                  console.log('[Dashboard] Saving report to localStorage...', reportData);
+                  localStorage.setItem('lastSessionReport', JSON.stringify(reportData));
+                  
+                  // Navigate to report
+                  console.log('[Dashboard] Navigating to /session-report...');
+                  router.push('/session-report');
+                  
+                  // Fallback if router fails
+                  setTimeout(() => {
+                      if (window.location.pathname !== '/session-report') {
+                          console.log('[Dashboard] Router push failed, trying window.location.href');
+                          window.location.href = '/session-report';
+                      }
+                  }, 100);
+
+                  setIsAnalyzingSession(false);
+              } else {
+                  throw new Error('No metrics returned from analysis API');
+              }
+          } catch (err) {
+              console.error('[Dashboard] Analysis failed:', err);
+              setIsAnalyzingSession(false);
+              alert('Analysis failed: ' + err.message);
+          }
+      } else {
+          console.warn('[Dashboard] No transcript detected.');
+          alert('No speech detected! Please make sure your microphone is working and speak during the session.');
       }
   };
 
@@ -51,13 +114,108 @@ function DashboardContent() {
     return 'poor';
   };
 
+    // Moved up for better scoping
+  const selectedMode = MODES.find(m => m.id === mode);
+
+  useEffect(() => {
+    if (selectedMode && selectedMode.prompts && !currentPrompt) {
+      const randomPrompt = selectedMode.prompts[Math.floor(Math.random() * selectedMode.prompts.length)];
+      setCurrentPrompt(randomPrompt);
+    }
+  }, [selectedMode, currentPrompt]);
+
+  const handleNewPrompt = () => {
+    if (selectedMode && selectedMode.prompts) {
+      let nextPrompt;
+      do {
+        nextPrompt = selectedMode.prompts[Math.floor(Math.random() * selectedMode.prompts.length)];
+      } while (nextPrompt === currentPrompt && selectedMode.prompts.length > 1);
+      setCurrentPrompt(nextPrompt);
+    }
+  };
+
+  if (!mode) {
+    return (
+      <div className="app-container">
+        <Navbar />
+        <main className="practice-container" style={{ paddingTop: '2rem' }}>
+          <header className="practice-header" style={{ marginBottom: '3rem', textAlign: 'center' }}>
+            <h1 style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>Choose your scenario</h1>
+            <p style={{ opacity: 0.7, fontSize: '1.1rem' }}>Select a mode to start your AI-powered speech analysis session.</p>
+          </header>
+
+          <div className="practice-grid">
+            {MODES.map((m) => (
+              <Link 
+                key={m.id} 
+                href={`/dashboard?mode=${m.id}`}
+                style={{ textDecoration: 'none' }}
+                className={`practice-card ${m.className}`}
+              >
+                <div className="card-bg-icon">{m.icon}</div>
+                <h3>{m.title}</h3>
+                <h4>{m.subtitle}</h4>
+                <p>{m.description}</p>
+              </Link>
+            ))}
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="app-container">
       <Navbar />
 
+      {isAnalyzingSession && (
+          <div className="loading-overlay" style={{
+              position: 'fixed',
+              top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(0,0,0,0.85)',
+              backdropFilter: 'blur(10px)',
+              zIndex: 1000,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '1.5rem'
+          }}>
+              <div className="loader-ring"></div>
+              <p style={{ fontSize: '1.25rem', fontWeight: 500, letterSpacing: '0.5px' }}>Analyzing your performance...</p>
+              <p style={{ opacity: 0.5, fontSize: '0.9rem' }}>Gemini is evaluating your speech metrics and feedback.</p>
+          </div>
+      )}
+
       <main className="dashboard-grid">
         {/* Left Column: Recording and Transcript */}
         <section className="dashboard-col">
+          {currentPrompt && (
+            <div className="glass-panel" style={{ 
+              marginBottom: '1rem', 
+              padding: '1.2rem', 
+              background: 'linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%)',
+              borderLeft: '4px solid var(--accent)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.75rem',
+              minHeight: 'auto',
+              flex: 'none'
+            }}>
+              <div>
+                <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px', opacity: 0.6, fontWeight: 700 }}>Active Scenario Prompt</span>
+                <p style={{ fontSize: '1.2rem', fontWeight: 500, marginTop: '0.5rem', lineHeight: '1.4' }}>"{currentPrompt}"</p>
+              </div>
+              <button 
+                onClick={handleNewPrompt} 
+                className="btn-link" 
+                style={{ alignSelf: 'flex-start', fontSize: '0.8rem', opacity: 0.7 }}
+              >
+                ↻ Get another prompt
+              </button>
+            </div>
+          )}
+
           <div className="controls-card">
             <button 
               className="btn btn-primary" 
@@ -78,6 +236,21 @@ function DashboardContent() {
                 <div className={`dot ${isRecording ? 'recording' : ''}`}></div>
                 <span id="statusText">{status}</span>
               </div>
+              {selectedMode && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                  <span className="mode-tag" style={{ 
+                    fontSize: '0.75rem', 
+                    padding: '0.2rem 0.6rem', 
+                    borderRadius: '12px', 
+                    background: 'var(--surface-3)',
+                    color: 'var(--text-secondary)',
+                    fontWeight: 600
+                  }}>
+                    {selectedMode.icon} {selectedMode.title}
+                  </span>
+                  <Link href="/dashboard" className="btn-link" style={{ fontSize: '0.75rem', opacity: 0.6 }}>Change</Link>
+                </div>
+              )}
             </div>
           </div>
 

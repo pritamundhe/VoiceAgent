@@ -2,40 +2,10 @@
 
 import Navbar from '../../components/Navbar';
 import Link from 'next/link';
+import { MODES } from '../../lib/modes';
 
 export default function Practice() {
-    const modes = [
-        { 
-            id: 'interview', icon: '💼', title: 'Job Interview', subtitle: 'Technical & Behavioral', 
-            description: 'Practice behavioral and technical questions with real-time feedback.',
-            className: 'card-dark'
-        },
-        { 
-            id: 'public-speaking', icon: '🎤', title: 'Public', subtitle: 'Speaking', 
-            description: 'Master your pacing, clarity, and confidence for the big stage.',
-            className: 'card-light'
-        },
-        { 
-            id: 'pitch', icon: '🚀', title: 'Pitch', subtitle: 'Technical',
-            description: 'Learn to explain complex concepts simply & persuasively.',
-            className: 'card-dark'
-        },
-        { 
-            id: 'casual', icon: '☕', title: 'Casual', subtitle: 'Chat',
-            description: 'Improve your conversational flow and reduce filler words.',
-            className: 'card-glass'
-        },
-        { 
-            id: 'sales', icon: '💰', title: 'Sales Pitch', subtitle: 'Persuasion',
-            description: 'Refine your energy and persuasion with dynamic pacing analysis.',
-            className: 'card-light'
-        },
-        { 
-            id: 'storytelling', icon: '📖', title: 'Stories', subtitle: 'Emotional resonance',
-            description: 'Enhance emotional resonance and variable pace for better impact.',
-            className: 'card-dark'
-        },
-    ];
+    const modes = MODES;
 
     return (
         <div className="app-container">

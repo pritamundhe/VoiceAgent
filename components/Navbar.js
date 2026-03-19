@@ -48,7 +48,6 @@ export default function Navbar({ mode }) {
 
             <div className="nav-links">
                 <Link href="/" className={`nav-link ${pathname === '/' ? 'active' : ''}`}>Home</Link>
-                <Link href="/dashboard" className={`nav-link ${pathname === '/dashboard' ? 'active' : ''}`}>Dashboard</Link>
                 <Link href="/practice" className={`nav-link ${pathname === '/practice' ? 'active' : ''}`}>Practice</Link>
             </div>
 
