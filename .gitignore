@@ -39,3 +39,6 @@ venv/
 *.py[cod]
 *$py.class
 .python-version
+
+# Temporary files
+/tmp
