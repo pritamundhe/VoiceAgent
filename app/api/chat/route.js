@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateDeepSeekContent } from '../../../lib/deepseek';
 import { ElevenLabsClient } from '@elevenlabs/elevenlabs-js';
 
 export async function POST(request) {
@@ -9,12 +9,9 @@ export async function POST(request) {
       return Response.json({ error: 'No transcript provided' }, { status: 400 });
     }
 
-    if (!process.env.GEMINI_API_KEY) {
-      return Response.json({ error: 'GEMINI_API_KEY is not configured' }, { status: 500 });
+    if (!process.env.DEEPSEEK_API_KEY) {
+      return Response.json({ error: 'DEEPSEEK_API_KEY is not configured' }, { status: 500 });
     }
-
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     let prompt = `You are an AI conversational partner chatting directly with the user. Keep the flow continuous and engaging.\n\n`;
     prompt += `User just said:\n"${transcript}"\n\n`;
@@ -35,8 +32,7 @@ export async function POST(request) {
       prompt += `Context: Friendly chat. Ask a natural follow-up question to continue the conversation.`;
     }
 
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
+    const responseText = await generateDeepSeekContent(prompt, { model: 'deepseek-chat' });
 
     let audioBase64 = null;
     if (process.env.ELEVENLABS_API_KEY) {
@@ -61,7 +57,7 @@ export async function POST(request) {
     return Response.json({ response: responseText, audioBase64 });
 
   } catch (error) {
-    console.error('Gemini API Error:', error);
+    console.error('DeepSeek API Error:', error);
     return Response.json({ error: 'Failed to generate response', details: error.message }, { status: 500 });
   }
 }

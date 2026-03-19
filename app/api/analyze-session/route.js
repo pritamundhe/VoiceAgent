@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateDeepSeekContent } from '../../../lib/deepseek';
 import { calculateMetrics } from '../../../lib/analytics';
 
 export async function POST(request) {
@@ -15,13 +15,10 @@ export async function POST(request) {
             return Response.json({ error: 'Failed to calculate metrics' }, { status: 500 });
         }
 
-        // 2. Core Gemini Analysis
-        if (!process.env.GEMINI_API_KEY) {
-            return Response.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
+        // 2. Core DeepSeek Analysis
+        if (!process.env.DEEPSEEK_API_KEY) {
+            return Response.json({ error: 'DEEPSEEK_API_KEY not configured' }, { status: 500 });
         }
-
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
         const aiPrompt = `
         You are an expert speech coach. Analyze the following transcript from a "${mode}" session.
@@ -46,8 +43,7 @@ export async function POST(request) {
         Return ONLY the JSON. No conversational text.
         `;
 
-        const result = await model.generateContent(aiPrompt);
-        const aiResponseText = result.response.text();
+        const aiResponseText = await generateDeepSeekContent(aiPrompt, { model: 'deepseek-chat' });
         
         let aiAnalysis;
         try {

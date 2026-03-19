@@ -39,7 +39,16 @@ function DashboardContent() {
   const handleStopRecording = async () => {
       stopRecording();
       
-      const fullTranscript = (transcript + ' ' + (currentTurn || '')).trim();
+      const fullTranscript = (
+          chatHistory
+            .filter(m => m.role === 'user')
+            .map(m => m.content)
+            .join(' ') + 
+          ' ' + 
+          transcript + 
+          ' ' + 
+          (currentTurn || '')
+      ).trim();
 
       // If we have a transcript, trigger deep analysis
       if (fullTranscript.length > 0) {
@@ -183,7 +192,7 @@ function DashboardContent() {
           }}>
               <div className="loader-ring"></div>
               <p style={{ fontSize: '1.25rem', fontWeight: 500, letterSpacing: '0.5px' }}>Analyzing your performance...</p>
-              <p style={{ opacity: 0.5, fontSize: '0.9rem' }}>Gemini is evaluating your speech metrics and feedback.</p>
+              <p style={{ opacity: 0.5, fontSize: '0.9rem' }}>DeepSeek is evaluating your speech metrics and feedback.</p>
           </div>
       )}
 
@@ -258,8 +267,8 @@ function DashboardContent() {
             
             {chatHistory.map((msg, idx) => (
               <div key={idx} className={`chat-message ${msg.role}`}>
-                <span style={{ fontSize: '0.85rem', color: msg.role === 'ai' ? '#69db7c' : 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>
-                    {msg.role === 'ai' ? 'Gemini AI Coach' : 'You'}
+                <span style={{ fontSize: '0.85rem', color: '#69db7c', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>
+                    {msg.role === 'ai' ? 'DeepSeek AI Coach' : 'You'}
                 </span>
                 <div style={{ fontSize: msg.role === 'ai' ? '1.1rem' : '1.05rem', lineHeight: '1.6', color: 'var(--text)', margin: 0 }}>
                     {msg.content}
@@ -289,7 +298,7 @@ function DashboardContent() {
 
             {isAnalyzingAI && (
               <div className="chat-message ai">
-                <span style={{ fontSize: '0.85rem', color: '#69db7c', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Gemini AI Coach</span>
+                <span style={{ fontSize: '0.85rem', color: '#69db7c', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>DeepSeek AI Coach</span>
                 <div style={{ fontSize: '1.1rem', lineHeight: '1.6', color: 'var(--text)' }}>
                   <span style={{ fontStyle: 'italic', opacity: 0.7 }}>Typing response...</span>
                 </div>
