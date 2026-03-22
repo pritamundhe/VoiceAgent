@@ -4,6 +4,8 @@ import { useState, useEffect, Suspense } from 'react';
 import Navbar from '../../components/Navbar';
 import useRecorder from '../../hooks/useRecorder';
 import PaceChart from '../../components/PaceChart';
+import SpeechAnalysisPanel from '../../components/SpeechAnalysisPanel';
+import LiveMonitor from '../../components/LiveMonitor';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { MODES } from '../../lib/modes';
@@ -31,6 +33,7 @@ function DashboardContent() {
     fluency,
     chatHistory,
     isAnalyzingAI,
+    liveAnalysis,
     startRecording,
     stopRecording,
     fetchAiFeedback
@@ -125,24 +128,51 @@ function DashboardContent() {
     return 'poor';
   };
 
-    // Moved up for better scoping
   const selectedMode = MODES.find(m => m.id === mode);
+  const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
+
+  const generateNewPrompt = async (modeObj) => {
+      setIsGeneratingPrompt(true);
+      setCurrentPrompt(''); // clear immediately for UX
+      try {
+          const res = await fetch('/api/generate-prompt', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                  modeId: modeObj.id, 
+                  modeTitle: modeObj.title, 
+                  description: modeObj.description 
+              })
+          });
+          const data = await res.json();
+          if (data.prompt) {
+              setCurrentPrompt(data.prompt);
+          } else {
+              // fallback to static if API fails
+              const randomPrompt = modeObj.prompts[Math.floor(Math.random() * modeObj.prompts.length)];
+              setCurrentPrompt(randomPrompt);
+          }
+      } catch (err) {
+          console.error('Prompt fetch error:', err);
+          // fallback
+          const randomPrompt = modeObj.prompts[Math.floor(Math.random() * modeObj.prompts.length)];
+          setCurrentPrompt(randomPrompt);
+      } finally {
+          setIsGeneratingPrompt(false);
+      }
+  };
 
   useEffect(() => {
-    if (selectedMode && selectedMode.prompts && !currentPrompt) {
-      const randomPrompt = selectedMode.prompts[Math.floor(Math.random() * selectedMode.prompts.length)];
-      setCurrentPrompt(randomPrompt);
+    if (selectedMode && !currentPrompt && !isGeneratingPrompt) {
+        generateNewPrompt(selectedMode);
     }
-  }, [selectedMode, currentPrompt]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMode]);
 
   const handleNewPrompt = () => {
-    if (selectedMode && selectedMode.prompts) {
-      let nextPrompt;
-      do {
-        nextPrompt = selectedMode.prompts[Math.floor(Math.random() * selectedMode.prompts.length)];
-      } while (nextPrompt === currentPrompt && selectedMode.prompts.length > 1);
-      setCurrentPrompt(nextPrompt);
-    }
+      if (selectedMode && !isGeneratingPrompt) {
+          generateNewPrompt(selectedMode);
+      }
   };
 
   if (!mode) {
@@ -201,7 +231,7 @@ function DashboardContent() {
       <main className="dashboard-grid">
         {/* Left Column: Recording and Transcript */}
         <section className="dashboard-col">
-          {currentPrompt && (
+          {(currentPrompt || isGeneratingPrompt) && (
             <div className="glass-panel" style={{ 
               marginBottom: '1rem', 
               padding: '1.2rem', 
@@ -215,14 +245,17 @@ function DashboardContent() {
             }}>
               <div>
                 <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px', opacity: 0.6, fontWeight: 700 }}>Active Scenario Prompt</span>
-                <p style={{ fontSize: '1.2rem', fontWeight: 500, marginTop: '0.5rem', lineHeight: '1.4' }}>"{currentPrompt}"</p>
+                <p style={{ fontSize: '1.2rem', fontWeight: 500, marginTop: '0.5rem', lineHeight: '1.4', opacity: isGeneratingPrompt ? 0.5 : 1 }}>
+                  {isGeneratingPrompt ? "Generating a custom scenario with ChatGPT..." : `"${currentPrompt}"`}
+                </p>
               </div>
               <button 
                 onClick={handleNewPrompt} 
                 className="btn-link" 
-                style={{ alignSelf: 'flex-start', fontSize: '0.8rem', opacity: 0.7 }}
+                style={{ alignSelf: 'flex-start', fontSize: '0.8rem', opacity: isGeneratingPrompt ? 0.4 : 0.7 }}
+                disabled={isGeneratingPrompt}
               >
-                ↻ Get another prompt
+                {isGeneratingPrompt ? '↻ Generating...' : '↻ Get another prompt'}
               </button>
             </div>
           )}
@@ -322,6 +355,8 @@ function DashboardContent() {
 
         {/* Right Column: Metrics and Analytics */}
         <section className="dashboard-col">
+          <LiveMonitor metrics={liveAnalysis} isRecording={isRecording} chatHistory={chatHistory} />
+          
           <div className="filler-panel">
             <div className="filler-header">
               <span className="filler-label">Breakdown</span>
@@ -382,6 +417,8 @@ function DashboardContent() {
               <PaceChart data={paceHistory.data} labels={paceHistory.labels} />
             </div>
           </div>
+
+          <SpeechAnalysisPanel metrics={liveAnalysis} isRecording={isRecording} />
 
           <div className="grammar-panel" style={{ borderLeft: '4px solid #ff6b6b' }}>
             <span className="filler-label">Grammar Suggestions</span>

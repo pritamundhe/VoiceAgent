@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 
 const SAMPLE_RATE = 16000;
 const FILLER_WORDS = ['um', 'uh', 'like', 'actually', 'basically'];
@@ -16,15 +16,40 @@ export default function useRecorder(mode = '', prompt = '') {
     const [totalFillers, setTotalFillers] = useState(0);
     const [totalWords, setTotalWords] = useState(0);
     const [duration, setDuration] = useState(0);
-    const [wpm, setWpm] = useState(0);
     const [grammarErrors, setGrammarErrors] = useState(0);
+    const wordTimestampsRef = useRef([]);
     const [grammarSuggestions, setGrammarSuggestions] = useState([]);
     const [paceHistory, setPaceHistory] = useState({ labels: [], data: [] });
-    const [fluency, setFluency] = useState(100);
+    
+    // Derived Stats
+    const wpm = duration > 0 ? Math.round(totalWords / (duration / 60)) : 0;
+    
+    const fluency = useMemo(() => {
+        let score = 100;
+        score -= (totalFillers * 2);
+        score -= (grammarErrors * 5);
+        if (wpm > 0 && (wpm < 110 || wpm > 180)) score -= 10;
+        return Math.max(0, score);
+    }, [totalFillers, grammarErrors, wpm]);
+
+    const [liveAnalysis, setLiveAnalysis] = useState({
+        energy: 0,
+        stability: 100,
+        pauseQuality: 100,
+        clarity: 100,
+        liveWpm: 0,
+        confidence: 100,
+        sentiment: 0,  // DistilBERT Sentiment
+        emotion: 'neu' // SpeechBrain Emotion
+    });
 
     // AI Feedback & Chat History State
     const [chatHistory, setChatHistory] = useState([]); // { role: 'user' | 'ai', content: '' }
     const [isAnalyzingAI, setIsAnalyzingAI] = useState(false);
+    
+    // Live Ref for periodic analysis
+    const lastSentimentTextRef = useRef('');
+    const mediaRecorderRef = useRef(null);
 
     const wsRef = useRef(null);
     const audioContextRef = useRef(null);
@@ -34,6 +59,8 @@ export default function useRecorder(mode = '', prompt = '') {
     const startTimeRef = useRef(null);
     const durationIntervalRef = useRef(null);
     const pauseTimeoutRef = useRef(null);
+    const analyserRef = useRef(null);
+    const lastAudioTimeRef = useRef(Date.now());
     
     // Accumulate distinct sentences so they aren't overwritten
     const committedTurnsRef = useRef([]);
@@ -56,7 +83,14 @@ export default function useRecorder(mode = '', prompt = '') {
             mediaStreamRef.current.getTracks().forEach(t => t.stop());
             mediaStreamRef.current = null;
         }
-        if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+            try { mediaRecorderRef.current.stop(); } catch (e) {}
+            mediaRecorderRef.current = null;
+        }
+        if (analyserRef.current) {
+            analyserRef.current = null;
+        }
+        if (wsRef.current && wsRef.current.readyState !== WebSocket.OPEN) {
             try { wsRef.current.close(); } catch (e) {}
             wsRef.current = null;
         }
@@ -107,34 +141,92 @@ export default function useRecorder(mode = '', prompt = '') {
     const updateWordCount = useCallback((text) => {
         const words = text.trim().split(/\s+/).filter(w => w.length > 0);
         setTotalWords(prev => prev + words.length);
+        
+        // Track timestamps for LiveWPM
+        const now = Date.now();
+        const newTimestamps = words.map(() => now);
+        wordTimestampsRef.current = [...wordTimestampsRef.current, ...newTimestamps];
     }, []);
 
     useEffect(() => {
-        // Calculate WPM and Fluency whenever words or fillers change
-        if (duration > 0) {
-            const currentWpm = Math.round(totalWords / (duration / 60));
-            setWpm(currentWpm);
-
-            if (duration % 2 === 0) { // Update pace history every 2 seconds
-                setPaceHistory(prev => {
-                    const newLabels = [...prev.labels, `${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')}`];
-                    const newData = [...prev.data, currentWpm];
-                    return {
-                        labels: newLabels.slice(-20),
-                        data: newData.slice(-20)
-                    };
-                });
-            }
+        if (duration > 0 && duration % 2 === 0) {
+            setPaceHistory(prev => {
+                // If the last label was the same second, don't add again
+                const label = `${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')}`;
+                if (prev.labels[prev.labels.length - 1] === label) return prev;
+                
+                const newLabels = [...prev.labels, label];
+                const newData = [...prev.data, wpm];
+                return {
+                    labels: newLabels.slice(-20),
+                    data: newData.slice(-20)
+                };
+            });
         }
+    }, [duration]); // Only depend on duration
 
-        // Fluency logic
-        let score = 100;
-        score -= (totalFillers * 2);
-        score -= (grammarErrors * 5);
-        if (wpm > 0 && (wpm < 110 || wpm > 180)) score -= 10;
-        setFluency(Math.max(0, score));
+    useEffect(() => {
+        // Send to distilbert every 3 seconds if transcript changed
+        const interval = setInterval(async () => {
+             const currentText = (transcript + ' ' + currentTurn).trim();
+             if (currentText && currentText.length > 10 && currentText !== lastSentimentTextRef.current) {
+                 lastSentimentTextRef.current = currentText;
+                 // Get last 20 words so we aren't analyzing a massive paragraph
+                 const chunk = currentText.split(' ').slice(-20).join(' ');
+                 try {
+                     const res = await fetch('/api/analyze-sentiment', {
+                         method: 'POST',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify({ text: chunk })
+                     });
+                     if (res.ok) {
+                         const data = await res.json();
+                         if (data.sentiment) {
+                             // "POSITIVE" or "NEGATIVE", mapping to a score 0-100
+                             const isPositive = data.sentiment.label === 'POSITIVE';
+                             const scoreVal = Math.round(data.sentiment.score * 100);
+                             setLiveAnalysis(prev => ({
+                                 ...prev,
+                                 sentiment: isPositive ? scoreVal : -scoreVal
+                             }));
+                         }
+                     }
+                 } catch (e) {}
+             }
+        }, 3000);
 
-    }, [totalWords, duration, totalFillers, grammarErrors, wpm]);
+        return () => clearInterval(interval);
+    }, [transcript, currentTurn]);
+
+    useEffect(() => {
+        // Update live analysis slow metrics
+        setLiveAnalysis(prev => {
+            // Stability: based on paceHistory variance
+            let stability = 100;
+            if (paceHistory.data.length > 2) {
+                const mean = paceHistory.data.reduce((a, b) => a + b, 0) / paceHistory.data.length;
+                const variance = paceHistory.data.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / paceHistory.data.length;
+                stability = Math.max(0, 100 - (Math.sqrt(variance) / 2));
+            }
+
+            // Clarity: based on filler ratio
+            const fillerRatio = totalWords > 0 ? (totalFillers / totalWords) : 0;
+            const clarity = Math.max(0, 100 - (fillerRatio * 500));
+
+            // Live WPM: Rate over last 5 seconds
+            const now = Date.now();
+            wordTimestampsRef.current = wordTimestampsRef.current.filter(ts => now - ts < 5000);
+            const liveWpm = Math.round((wordTimestampsRef.current.length / 5) * 60);
+
+            return {
+                ...prev,
+                stability: Math.round(stability),
+                clarity: Math.round(clarity),
+                liveWpm,
+                confidence: Math.round((stability + clarity + prev.energy + prev.pauseQuality) / 4)
+            };
+        });
+    }, [totalWords, totalFillers, paceHistory.data]); // No wpm or liveAnalysis in deps
 
     const startRecording = useCallback(async () => {
         try {
@@ -168,9 +260,45 @@ export default function useRecorder(mode = '', prompt = '') {
                         mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
                         audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
                         const source = audioContextRef.current.createMediaStreamSource(mediaStreamRef.current);
+                        
+                        // Add Analyser
+                        analyserRef.current = audioContextRef.current.createAnalyser();
+                        analyserRef.current.fftSize = 256;
+                        source.connect(analyserRef.current);
+
                         scriptProcessorRef.current = audioContextRef.current.createScriptProcessor(4096, 1, 1);
+                        const bufferLength = analyserRef.current.frequencyBinCount;
+                        const dataArray = new Uint8Array(bufferLength);
+
                         scriptProcessorRef.current.onaudioprocess = (event) => {
                             if (!proxyReadyRef.current || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+                            
+                            // Real-time Energy/Volume Calculation
+                            if (analyserRef.current) {
+                                analyserRef.current.getByteTimeDomainData(dataArray);
+                                let sum = 0;
+                                for (let i = 0; i < bufferLength; i++) {
+                                    const v = (dataArray[i] / 128.0) - 1.0;
+                                    sum += v * v;
+                                }
+                                const rms = Math.sqrt(sum / bufferLength);
+                                const energy = Math.min(100, Math.round(rms * 500));
+                                
+                                // Pause Quality Detection
+                                const now = Date.now();
+                                if (energy > 10) {
+                                    lastAudioTimeRef.current = now;
+                                }
+                                const silenceDuration = (now - lastAudioTimeRef.current) / 1000;
+                                const pauseQuality = Math.max(0, 100 - (silenceDuration * 10));
+
+                                setLiveAnalysis(prev => ({ 
+                                    ...prev, 
+                                    energy,
+                                    pauseQuality: Math.round(pauseQuality)
+                                }));
+                            }
+
                             const inputData = event.inputBuffer.getChannelData(0);
                             const pcm = new Int16Array(inputData.length);
                             for (let i = 0; i < inputData.length; i++) {
@@ -187,6 +315,36 @@ export default function useRecorder(mode = '', prompt = '') {
                         setStatus('Recording...');
                         startTimeRef.current = Date.now();
                         
+                        // Setup MediaRecorder for SpeechBrain Audio analysis
+                        try {
+                            mediaRecorderRef.current = new MediaRecorder(mediaStreamRef.current);
+                            mediaRecorderRef.current.ondataavailable = async (e) => {
+                                if (e.data.size > 0 && isRecording) {
+                                    const reader = new FileReader();
+                                    reader.readAsDataURL(e.data);
+                                    reader.onloadend = async () => {
+                                        const base64data = reader.result.split(',')[1];
+                                        try {
+                                            const res = await fetch('/api/analyze-audio', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ audioBase64: base64data })
+                                            });
+                                            if (res.ok) {
+                                                const data = await res.json();
+                                                if (data.emotions && data.emotions.length > 0) {
+                                                    setLiveAnalysis(prev => ({ ...prev, emotion: data.emotions[0].label }));
+                                                }
+                                            }
+                                        } catch (err) {}
+                                    };
+                                }
+                            };
+                            mediaRecorderRef.current.start(4000); // 4 seconds chunk
+                        } catch (e) {
+                            console.warn('MediaRecorder for SpeechBrain failed to start on this browser.', e);
+                        }
+
                         // Capture the current duration so we can add to it instead of overwriting
                         const initialDuration = duration;
                         
@@ -321,6 +479,7 @@ export default function useRecorder(mode = '', prompt = '') {
         grammarSuggestions,
         paceHistory,
         fluency,
+        liveAnalysis,
         chatHistory,
         isAnalyzingAI,
         startRecording,
