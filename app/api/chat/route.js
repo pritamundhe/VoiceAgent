@@ -1,5 +1,10 @@
 import { generateOpenAIContent } from '../../../lib/openai';
 import { ElevenLabsClient } from '@elevenlabs/elevenlabs-js';
+import dbConnect from '@/lib/mongodb';
+import Chat from '@/models/Chat';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_change_me';
 
 export async function POST(request) {
   try {
@@ -33,6 +38,21 @@ export async function POST(request) {
     }
 
     const responseText = await generateOpenAIContent(prompt, { model: 'gpt-4o-mini' });
+
+    try {
+        await dbConnect();
+        const token = request.cookies.get('token')?.value;
+        if (token) {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            const userId = decoded.userId;
+
+            await Chat.create({ userId, role: 'user', content: transcript });
+            await Chat.create({ userId, role: 'ai', content: responseText });
+            console.log(`[Chat API] Saved chat history for user: ${userId}`);
+        }
+    } catch (dbErr) {
+        console.error('[Chat API] Failed to save chat to DB:', dbErr.message);
+    }
 
     let audioBase64 = null;
     if (process.env.ELEVENLABS_API_KEY) {

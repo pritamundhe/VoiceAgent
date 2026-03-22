@@ -1,5 +1,6 @@
 import dbConnect from '@/lib/mongodb';
 import Session from '@/models/Session';
+import User from '@/models/User';
 import jwt from 'jsonwebtoken';
 import { NextResponse } from 'next/server';
 
@@ -23,24 +24,54 @@ export async function GET(request) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
-    // Fetch user sessions
+    // Fetch user and sessions
+    const user = await User.findById(userId).select('name rank level xp createdAt');
     const sessions = await Session.find({ userId }).sort({ timestamp: -1 });
 
     if (sessions.length === 0) {
       return NextResponse.json({
+        user: user ? {
+          name: user.name,
+          rank: user.rank,
+          level: user.level,
+          xp: user.xp,
+          joined: user.createdAt
+        } : null,
         totalSessions: 0,
         avgFluency: 0,
+        avgWpm: 0,
         recentSessions: [],
         trends: { fluency: [], wpm: [], labels: [] },
-        fillers: {}
+        fillers: {},
+        mostUsedMode: 'N/A'
       });
     }
 
     // Calculate aggregations
     const totalSessions = sessions.length;
-    const avgFluency = Math.round(
-      sessions.reduce((acc, s) => acc + (s.metrics?.fluencyScore || 0), 0) / totalSessions
-    );
+    let totalFluency = 0;
+    let totalWpm = 0;
+    const modeCounts = {};
+    
+    sessions.forEach(s => {
+      totalFluency += (s.metrics?.fluencyScore || 0);
+      totalWpm += (s.metrics?.wpm || 0);
+      if (s.mode) {
+        modeCounts[s.mode] = (modeCounts[s.mode] || 0) + 1;
+      }
+    });
+
+    const avgFluency = Math.round(totalFluency / totalSessions);
+    const avgWpm = Math.round(totalWpm / totalSessions);
+    
+    let mostUsedMode = 'N/A';
+    let maxCount = 0;
+    Object.entries(modeCounts).forEach(([mode, count]) => {
+      if (count > maxCount) {
+        maxCount = count;
+        mostUsedMode = mode;
+      }
+    });
 
     // Trends (chronological order)
     const chronological = [...sessions].reverse();
@@ -71,8 +102,17 @@ export async function GET(request) {
     }));
 
     return NextResponse.json({
+      user: user ? {
+        name: user.name,
+        rank: user.rank,
+        level: user.level,
+        xp: user.xp,
+        joined: user.createdAt
+      } : null,
       totalSessions,
       avgFluency,
+      avgWpm,
+      mostUsedMode,
       recentSessions,
       trends,
       fillers

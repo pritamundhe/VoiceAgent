@@ -50,6 +50,7 @@ export default function Navbar({ mode }) {
                 <Link href="/" className={`nav-link ${pathname === '/' ? 'active' : ''}`}>Home</Link>
                 <Link href="/practice" className={`nav-link ${pathname === '/practice' ? 'active' : ''}`}>Practice</Link>
                 <Link href="/analytics" className={`nav-link ${pathname === '/analytics' ? 'active' : ''}`}>Analytics</Link>
+                <Link href="/learning-path" className={`nav-link ${pathname === '/learning-path' ? 'active' : ''}`} style={{ color: 'var(--accent)', fontWeight: 'bold' }}>Learning Path</Link>
             </div>
 
             <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
@@ -86,6 +87,13 @@ export default function Navbar({ mode }) {
                 {user ? (
                     <div className="user-menu" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                         <Link href="/profile" style={{ fontSize: '0.9rem', color: 'var(--text)', fontWeight: 600, textDecoration: 'none', cursor: 'pointer' }}>Hello, {user.name}</Link>
+                        {user.rank && (
+                            <Link href="/learning-path" style={{ textDecoration: 'none' }}>
+                                <span style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem', borderRadius: '12px', background: 'var(--accent)', color: '#000', fontWeight: 'bold', cursor: 'pointer' }}>
+                                    {user.rank} | {user.xp || 0} XP
+                                </span>
+                            </Link>
+                        )}
                         <button onClick={handleSignout} className="nav-link" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Sign Out</button>
                     </div>
                 ) : (

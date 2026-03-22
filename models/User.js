@@ -33,6 +33,18 @@ const UserSchema = new mongoose.Schema({
       ref: 'User',
     }
   ],
+  xp: {
+    type: Number,
+    default: 0,
+  },
+  level: {
+    type: Number,
+    default: 1,
+  },
+  rank: {
+    type: String,
+    default: 'Newbie',
+  },
 }, { timestamps: true });
 
 // Password hashing middleware

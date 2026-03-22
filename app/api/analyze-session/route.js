@@ -2,6 +2,7 @@ import { generateOpenAIContent } from '../../../lib/openai';
 import { calculateMetrics } from '../../../lib/analytics';
 import dbConnect from '@/lib/mongodb';
 import Session from '@/models/Session';
+import User from '@/models/User';
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_change_me';
@@ -70,6 +71,8 @@ export async function POST(request) {
         console.log(`   - Fluency Score: ${metrics.fluencyScore}`);
         console.log(`   - Words: ${metrics.totalWords}\n`);
 
+        let xpData = null;
+
         // 3. Persist to MongoDB
         try {
             await dbConnect();
@@ -90,6 +93,39 @@ export async function POST(request) {
 
                 await newSession.save();
                 console.log(`   - Session saved to DB for user: ${userId}`);
+
+                // --- XP & RANK LOGIC ---
+                const user = await User.findById(userId);
+                if (user) {
+                    const xpGained = Math.round((duration || 0) + (metrics.fluencyScore || 0) * 0.5);
+                    user.xp = (user.xp || 0) + xpGained;
+
+                    const getRank = (xp) => {
+                        if (xp >= 10000) return 'Master';
+                        if (xp >= 5000) return 'Expert';
+                        if (xp >= 3000) return 'Advanced';
+                        if (xp >= 1500) return 'Intermediate';
+                        if (xp >= 500) return 'Beginner';
+                        return 'Newbie';
+                    };
+                    
+                    const newRank = getRank(user.xp);
+                    if (newRank !== user.rank) {
+                        user.level = (user.level || 1) + 1;
+                        user.rank = newRank;
+                        console.log(`   🏆 User leveled up to ${newRank}!`);
+                    }
+
+                    await user.save();
+                    
+                    xpData = {
+                        xpGained,
+                        currentXp: user.xp,
+                        currentLevel: user.level,
+                        rank: user.rank
+                    };
+                    console.log(`   - User ${userId} gained ${xpGained} XP. Now Rank: ${user.rank} (${user.xp} XP)`);
+                }
             } else {
                 console.warn('   - No auth token found, session not saved to DB.');
             }
@@ -100,6 +136,7 @@ export async function POST(request) {
         return Response.json({
             metrics,
             aiAnalysis,
+            xpData,
             timestamp: new Date().toISOString()
         });
 
