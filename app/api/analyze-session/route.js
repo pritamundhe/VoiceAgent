@@ -9,7 +9,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_change_me';
 
 export async function POST(request) {
     try {
-        const { transcript, duration, mode, prompt: userPrompt } = await request.json();
+        const { transcript, duration, mode, prompt: userPrompt, taskType, repeatResults } = await request.json();
 
         if (!transcript) {
             return Response.json({ error: 'No transcript provided' }, { status: 400 });
@@ -26,28 +26,47 @@ export async function POST(request) {
             return Response.json({ error: 'OPENAI_API_KEY not configured' }, { status: 500 });
         }
 
-        const aiPrompt = `
-        You are an expert speech coach. Analyze the following transcript from a "${mode}" session.
-        The user was responding to this prompt: "${userPrompt || 'General Practice'}"
+        let aiPrompt = "";
         
-        Metrics already calculated:
-        - WPM: ${metrics.wpm}
-        - Total Words: ${metrics.totalWords}
-        - Filler Word Rate: ${(metrics.totalFillers / metrics.totalWords * 100).toFixed(1)}%
-        - Vocabulary Richness: ${metrics.vocabRichness}
-        
-        Transcript: 
-        "${transcript}"
-        
-        Instruction: 
-        Provide a structured evaluation in JSON format with these exact keys:
-        - topic: (Briefly identify what the user spoke about)
-        - feedback: (A supportive 2-3 sentence summary of the performance)
-        - suggestions: (An array of exactly 3 tactical, short improvement tips)
-        - confidenceScore: (A score from 0 to 100 based on word flow and certainty)
-        
-        Return ONLY the JSON. No conversational text.
-        `;
+        if (taskType === 'repeat' && repeatResults) {
+            const history = repeatResults.map((r, i) => `S${i+1}: Target: "${r.target}" | Spoken: "${r.spoken}"`).join('\n');
+            aiPrompt = `
+You are an expert speech coach evaluating a repetitive listening exercise.
+Here is the user's performance:
+${history}
+
+Provide a structured evaluation in JSON format with these exact keys:
+- topic: "Repeat Sentence Practice"
+- feedback: (A highly concise 2-sentence summary of their listening accuracy and pronunciation)
+- suggestions: (An array of exactly 2 tactical, short tips for fixing any missed words)
+- confidenceScore: (A score from 0 to 100 based on mapping accuracy)
+
+Return ONLY the JSON. No conversational text.
+`;
+        } else {
+            aiPrompt = `
+You are an expert speech coach. Analyze the following transcript from a "${mode}" session.
+The user was responding to this prompt: "${userPrompt || 'General Practice'}"
+
+Metrics already calculated:
+- WPM: ${metrics.wpm}
+- Total Words: ${metrics.totalWords}
+- Filler Word Rate: ${(metrics.totalFillers / Math.max(1, metrics.totalWords) * 100).toFixed(1)}%
+- Vocabulary Richness: ${metrics.vocabRichness}
+
+Transcript: 
+"${transcript}"
+
+Instruction: 
+Provide a structured evaluation in JSON format with these exact keys:
+- topic: (Briefly identify what the user spoke about)
+- feedback: (A supportive 2-3 sentence summary of the performance)
+- suggestions: (An array of exactly 3 tactical, short improvement tips)
+- confidenceScore: (A score from 0 to 100 based on word flow and certainty)
+
+Return ONLY the JSON. No conversational text.
+`;
+        }
 
         const aiResponseText = await generateOpenAIContent(aiPrompt, { model: 'gpt-4o-mini' });
         

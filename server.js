@@ -98,7 +98,12 @@ wss.on('connection', (clientWs) => {
   });
 
   aaiWs.on('close', (code, reason) => {
-    console.log(`❌ AssemblyAI closed - Code: ${code}, Reason: ${reason.toString()}`);
+    const isNormal = code === 1000 || code === 1005 || code === 1001;
+    if (isNormal) {
+      console.log(`🏁 AssemblyAI Session Ended (Code: ${code})`);
+    } else {
+      console.log(`❌ AssemblyAI closed unexpectedly - Code: ${code}, Reason: ${reason.toString()}`);
+    }
     if (clientWs.readyState === WebSocket.OPEN) clientWs.close(code);
   });
 

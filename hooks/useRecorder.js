@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 const SAMPLE_RATE = 16000;
 const FILLER_WORDS = ['um', 'uh', 'like', 'actually', 'basically'];
 
-export default function useRecorder(mode = '', prompt = '') {
+export default function useRecorder(mode = '', prompt = '', taskType = '') {
     const [isRecording, setIsRecording] = useState(false);
     const [status, setStatus] = useState('Ready to record');
     const [transcript, setTranscript] = useState('');
@@ -90,8 +90,10 @@ export default function useRecorder(mode = '', prompt = '') {
         if (analyserRef.current) {
             analyserRef.current = null;
         }
-        if (wsRef.current && wsRef.current.readyState !== WebSocket.OPEN) {
-            try { wsRef.current.close(); } catch (e) {}
+        if (wsRef.current) {
+            if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
+                try { wsRef.current.close(); } catch (e) {}
+            }
             wsRef.current = null;
         }
         setStatus('Ready to record');
@@ -366,11 +368,14 @@ export default function useRecorder(mode = '', prompt = '') {
                             let isNewTurn = false;
                             
                             if (prevText.length > 0) {
-                                // AssemblyAI often sends an expanding string for one continuous thought.
+                                const cleanTrimmed = trimmedText.toLowerCase().replace(/[^\w\s]/g, '');
+                                const cleanPrev = prevText.toLowerCase().replace(/[^\w\s]/g, '');
+                                const checkPrefix = cleanPrev.substring(0, 12);
+                                
                                 // If the incoming text shrinks dramatically, or completely changes, it's a new thought/turn.
                                 if (trimmedText.length < prevText.length - 15) {
                                     isNewTurn = true;
-                                } else if (!trimmedText.toLowerCase().includes(prevText.substring(0, 10).toLowerCase())) {
+                                } else if (checkPrefix.length > 3 && !cleanTrimmed.includes(checkPrefix)) {
                                     isNewTurn = true;
                                 }
                             }
@@ -448,6 +453,8 @@ export default function useRecorder(mode = '', prompt = '') {
     // 6-second Pause Trigger
     useEffect(() => {
         if (!isRecording || !transcript.trim()) return;
+        const isTaskMode = taskType === 'repeat' || taskType === 'short' || taskType?.includes('fitb');
+        if (isTaskMode) return; 
 
         if (pauseTimeoutRef.current) clearTimeout(pauseTimeoutRef.current);
         
@@ -457,13 +464,16 @@ export default function useRecorder(mode = '', prompt = '') {
             setTranscript('');
             committedTurnsRef.current = [];
             lastTurnTextRef.current = '';
-            fetchAiFeedback(currentText, mode, prompt);
+            
+            if (taskType !== 'repeat') {
+                fetchAiFeedback(currentText, mode, prompt);
+            }
         }, 6000);
 
         return () => {
             if (pauseTimeoutRef.current) clearTimeout(pauseTimeoutRef.current);
         };
-    }, [transcript, isRecording, fetchAiFeedback, mode, prompt]);
+    }, [transcript, isRecording, fetchAiFeedback, mode, prompt, taskType]);
 
     return {
         isRecording,

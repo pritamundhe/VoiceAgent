@@ -51,6 +51,9 @@ const LiveMonitor = ({ metrics, isRecording, chatHistory = [] }) => {
         <div className="live-monitor-box" style={{ 
             backgroundColor: isRecording ? panelColor.bg : 'var(--surface-2)', 
             border: isRecording ? `1px solid ${panelColor.border}` : '1px solid var(--border)',
+            borderRadius: '18px',
+            padding: '1.25rem',
+            backdropFilter: 'var(--glass-blur)',
             transition: 'background-color 0.5s ease, border-color 0.5s ease'
         }}>
             <div className="monitor-title" style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -105,23 +108,7 @@ const LiveMonitor = ({ metrics, isRecording, chatHistory = [] }) => {
                 </div>
             </div>
 
-            {/* OpenAI Active Feedback */}
-            {latestAiMessage && (
-                <div className="live-ai-feedback" style={{ 
-                    marginTop: '1rem', 
-                    padding: '0.8rem', 
-                    background: 'rgba(105, 219, 124, 0.1)', 
-                    borderRadius: '8px',
-                    borderLeft: '4px solid #69db7c'
-                }}>
-                    <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: '#69db7c', fontWeight: 700, letterSpacing: '1px' }}>
-                        OpenAI Coach
-                    </span>
-                    <p style={{ margin: '0.4rem 0 0 0', fontSize: '0.9rem', lineHeight: '1.4' }}>
-                        "{latestAiMessage}"
-                    </p>
-                </div>
-            )}
+
         </div>
     );
 };
