@@ -10,6 +10,14 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { MODES } from '../../lib/modes';
 
+const MicIcon = ({ isRecording }) => (
+    <div className={`mic-status ${isRecording ? 'pulse' : ''}`}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/>
+        </svg>
+    </div>
+);
+
 function DashboardContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -28,7 +36,7 @@ function DashboardContent() {
   const [hasPlayedTTS, setHasPlayedTTS] = useState(false);
   const [showPromptText, setShowPromptText] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
-  const [verificationResult, setVerificationResult] = useState(null); // { correct: boolean, feedback: string }
+  const [verificationResult, setVerificationResult] = useState(null);
 
   const {
     isRecording,
@@ -54,11 +62,7 @@ function DashboardContent() {
 
   const stopRecording = useCallback(() => {
     baseStopRecording();
-    // When recording stops in a quiz/fitb mode, trigger AI verification
-    if ((taskType === 'short' || taskType?.includes('fitb')) && !isVerifying) {
-        // We'll call this inside useEffect to ensure transcript is final
-    }
-  }, [baseStopRecording, taskType, isVerifying]);
+  }, [baseStopRecording]);
 
   const handleStopRecording = () => {
       stopRecording();
@@ -90,9 +94,7 @@ function DashboardContent() {
           (currentTurn || '')
       ).trim();
 
-      // If we have a transcript, trigger deep analysis
       if (fullTranscript.length > 0) {
-          console.log('[Dashboard] Starting session analysis...', { transcriptLength: fullTranscript.length, duration, mode });
           setIsAnalyzingSession(true);
           try {
               const res = await fetch('/api/analyze-session', {
@@ -108,14 +110,9 @@ function DashboardContent() {
                   })
               });
               
-              if (!res.ok) {
-                  const errorText = await res.text();
-                  throw new Error(`API Error (${res.status}): ${errorText}`);
-              }
+              if (!res.ok) throw new Error('API Error');
 
               const data = await res.json();
-              console.log('[Dashboard] Analysis complete:', data);
-
               if (data.metrics) {
                   const reportData = {
                       ...data,
@@ -123,33 +120,15 @@ function DashboardContent() {
                       modeTitle: selectedMode?.title || 'General Practice',
                       repeatResults: taskType === 'repeat' ? finalResults : undefined
                   };
-                  console.log('[Dashboard] Saving report to localStorage...', reportData);
                   localStorage.setItem('lastSessionReport', JSON.stringify(reportData));
-                  
-                  // Navigate to report
-                  console.log('[Dashboard] Navigating to /session-report...');
                   router.push('/session-report');
-                  
-                  // Fallback if router fails
-                  setTimeout(() => {
-                      if (window.location.pathname !== '/session-report') {
-                          console.log('[Dashboard] Router push failed, trying window.location.href');
-                          window.location.href = '/session-report';
-                      }
-                  }, 100);
-
-                  setIsAnalyzingSession(false);
-              } else {
-                  throw new Error('No metrics returned from analysis API');
               }
           } catch (err) {
-              console.error('[Dashboard] Analysis failed:', err);
+              console.error(err);
               setIsAnalyzingSession(false);
-              alert('Analysis failed: ' + err.message);
           }
       } else {
-          console.warn('[Dashboard] No transcript detected.');
-          alert('No speech detected! Please make sure your microphone is working and speak during the session.');
+          alert('No speech detected!');
       }
   };
 
@@ -159,19 +138,12 @@ function DashboardContent() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const getFluencyScore = (score) => {
-    if (score >= 90) return 'excellent';
-    if (score >= 75) return 'good';
-    if (score >= 50) return 'average';
-    return 'poor';
-  };
-
   const selectedMode = MODES.find(m => m.id === mode);
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
 
   const generateNewPrompt = async (modeObj) => {
       setIsGeneratingPrompt(true);
-      setCurrentPrompt(''); // clear immediately for UX
+      setCurrentPrompt('');
       setHasPlayedTTS(false);
       setShowPromptText(false);
       try {
@@ -197,54 +169,28 @@ function DashboardContent() {
                   setCurrentPromptIndex(0);
                   setCurrentPrompt(data.prompt);
               }
-          } else {
-              // fallback to static if API fails
-              const randomPrompt = modeObj.prompts[Math.floor(Math.random() * modeObj.prompts.length)];
-              setCurrentPrompt(randomPrompt);
           }
       } catch (err) {
-          console.error('Prompt fetch error:', err);
-          // fallback
-          const randomPrompt = modeObj.prompts[Math.floor(Math.random() * modeObj.prompts.length)];
-          setCurrentPrompt(randomPrompt);
+          console.error(err);
       } finally {
           setIsGeneratingPrompt(false);
       }
   };
 
   useEffect(() => {
-    // Treat as valid if we have either a selected predefined mode OR custom title from roadmap
     const hasModeContext = selectedMode || customTitle;
     if (hasModeContext && !currentPrompt && !isGeneratingPrompt) {
         generateNewPrompt(selectedMode);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMode, customTitle]);
 
-  // Auto-stop recording for Short Questions once a word is detected
   useEffect(() => {
-    if (taskType === 'short' && isRecording && (transcript.trim() || currentTurn.trim())) {
-      const fullSpoken = (transcript + ' ' + (currentTurn || '')).toLowerCase().replace(/[^\w\s]/g, '').trim();
-      if (fullSpoken.length > 0) {
-        const timer = setTimeout(() => {
-          stopRecording();
-        }, 1200);
-        return () => clearTimeout(timer);
-      }
-    }
-    // FITB needs more time for full sentence
-    if (taskType?.includes('fitb') && isRecording && (transcript.trim() || currentTurn.trim())) {
-        const fullSpoken = (transcript + ' ' + (currentTurn || '')).toLowerCase().replace(/[^\w\s]/g, '').trim();
-        if (fullSpoken.length > 5) { // Needs some length
-            const timer = setTimeout(() => {
-                stopRecording();
-            }, 2500); 
-            return () => clearTimeout(timer);
-        }
+    if ((taskType === 'short' || taskType?.includes('fitb')) && isRecording && (transcript.trim() || currentTurn.trim())) {
+      const timer = setTimeout(() => { stopRecording(); }, 1500);
+      return () => clearTimeout(timer);
     }
   }, [transcript, currentTurn, isRecording, taskType, stopRecording]);
 
-  // Handle Verification Trigger
   useEffect(() => {
     const handleVerify = async () => {
         const fullSpoken = (transcript + ' ' + (currentTurn || '')).trim();
@@ -263,7 +209,7 @@ function DashboardContent() {
                 const data = await res.json();
                 setVerificationResult(data);
             } catch (e) {
-                console.error("Verification failed:", e);
+                console.error(e);
             } finally {
                 setIsVerifying(false);
             }
@@ -272,533 +218,278 @@ function DashboardContent() {
     if (!isRecording) handleVerify();
   }, [isRecording, transcript, currentTurn, taskType, currentPrompt]);
 
-  const handleNewPrompt = () => {
-      if ((selectedMode || customTitle) && !isGeneratingPrompt) {
-          generateNewPrompt(selectedMode);
-      }
-  };
-
-  const playBeep = () => {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sine';
-      osc.frequency.value = 1000; 
-      gain.gain.setValueAtTime(0.5, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.3);
-  };
-
-  const handleStartAudioTask = () => {
-      if (!currentPrompt) return;
-      const textToSpeak = typeof currentPrompt === 'object' ? currentPrompt.q : currentPrompt;
-      playTTS(textToSpeak);
-  };
-
-  const playTTS = (text) => {
-      setIsPlayingTTS(true);
-      
-      const utterance = new SpeechSynthesisUtterance(text);
-      window.__activeUtterance = utterance; // Prevent garbage collection bug in Chrome that skips onend
-      utterance.rate = 0.95; 
-      
-      const voices = window.speechSynthesis.getVoices();
-      const engVoices = voices.filter(v => v.lang.startsWith('en'));
-      if(engVoices.length > 0) {
-          const pref = engVoices.find(v => v.name.includes('Google') || v.name.includes('Natural')) || engVoices[0];
-          utterance.voice = pref;
-      }
-      
-      utterance.onend = () => {
-          setIsPlayingTTS(false);
-          setHasPlayedTTS(true);
-          playBeep();
-          setTimeout(() => {
-              startRecording();
-          }, 600);
-      };
-      
-      // Some browsers require explicit error handling
-      utterance.onerror = (e) => {
-          console.error("TTS Error:", e);
-          setIsPlayingTTS(false);
-          setHasPlayedTTS(true);
-          setTimeout(() => {
-              startRecording(); // fallback on error just to not block
-          }, 600);
-      };
-      
-      window.speechSynthesis.speak(utterance);
-  };
-
   const handleNextSentence = () => {
       if ((taskType === 'repeat' || taskType === 'short' || taskType?.includes('fitb')) && currentPrompt) {
           const fullSpoken = transcript + ' ' + (currentTurn || '');
-          const targetText = typeof currentPrompt === 'object' ? currentPrompt.q : currentPrompt;
-          const expectedAnswer = typeof currentPrompt === 'object' ? currentPrompt.a : undefined;
           setRepeatResults(prev => [...prev, { 
-              target: targetText, 
-              expected: expectedAnswer,
+              target: typeof currentPrompt === 'object' ? currentPrompt.q : currentPrompt, 
+              expected: typeof currentPrompt === 'object' ? currentPrompt.a : undefined,
               spoken: fullSpoken.trim(),
               isShortQuiz: taskType === 'short',
               isFitb: taskType?.includes('fitb'),
               aiVerification: verificationResult
           }]);
       }
-      
       setVerificationResult(null);
       if (isRecording) stopRecording();
-      
       const nextIdx = currentPromptIndex + 1;
       if (nextIdx < promptQueue.length) {
           setCurrentPromptIndex(nextIdx);
           setCurrentPrompt(promptQueue[nextIdx]);
           setHasPlayedTTS(false);
           setShowPromptText(false);
-          
-          setTimeout(() => {
-              const nextText = typeof promptQueue[nextIdx] === 'object' ? promptQueue[nextIdx].q : promptQueue[nextIdx];
-              playTTS(nextText);
-          }, 1500);
       } else {
           handleEndSession();
       }
   };
 
-  const getTargetAnnotation = (targetRaw, spoken) => {
-      const target = typeof targetRaw === 'object' ? targetRaw.q : targetRaw;
-      const fullSpoken = (spoken || '').trim();
-      if (!fullSpoken) return `"${target}"`;
-      
-      // If perfect match (ignoring case/punctuation)
-      const cleanTarget = target.toLowerCase().replace(/[^\w\s]/g, '').trim();
-      const cleanSpoken = fullSpoken.toLowerCase().replace(/[^\w\s]/g, '').trim();
-      if (cleanTarget === cleanSpoken) {
-          return <span style={{ color: '#69db7c' }}>"{target}" (Perfect Match!)</span>;
-      }
-
-      // If they don't match, highlight the Target Sentence
-      const targetWordsRaw = target.split(/\s+/);
-      const spokenWords = cleanSpoken.split(/\s+/);
-      
-      return (
-          <>
-            "
-            {targetWordsRaw.map((rawWord, idx) => {
-                const cleanWord = rawWord.toLowerCase().replace(/[^\w\s]/g, '');
-                if (!cleanWord) return <span key={idx}>{rawWord} </span>;
-                
-                const isMatched = spokenWords.includes(cleanWord);
-                return (
-                    <span 
-                        key={idx} 
-                        style={{ color: isMatched ? '#69db7c' : '#ff6b6b' }}
-                    >
-                        {rawWord}{' '}
-                    </span>
-                );
-            })}
-            "
-          </>
-      );
-  };
-
   if (!mode && !customTitle) {
-    return (
-      <div className="app-container">
-        <Navbar />
-        <main className="practice-container" style={{ paddingTop: '2rem' }}>
-          <header className="practice-header" style={{ marginBottom: '3rem', textAlign: 'center' }}>
-            <h1 style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>Choose your scenario</h1>
-            <p style={{ opacity: 0.7, fontSize: '1.1rem' }}>Select a mode to start your AI-powered speech analysis session.</p>
-          </header>
-
-          <div className="practice-grid">
-            {MODES.map((m) => (
-              <Link 
-                key={m.id} 
-                href={`/dashboard?mode=${m.id}`}
-                style={{ textDecoration: 'none' }}
-                className={`practice-card ${m.className}`}
-              >
-                <div className="card-bg-icon">{m.icon}</div>
-                <h3>{m.title}</h3>
-                <h4>{m.subtitle}</h4>
-                <p>{m.description}</p>
-              </Link>
-            ))}
-          </div>
-        </main>
-      </div>
-    );
+      router.push('/practice');
+      return null;
   }
 
   return (
-    <div className="app-container">
+    <div className="dashboard-wrapper">
       <Navbar />
 
       {isAnalyzingSession && (
-          <div className="loading-overlay" style={{
-              position: 'fixed',
-              top: 0, left: 0, right: 0, bottom: 0,
-              background: 'rgba(0,0,0,0.85)',
-              backdropFilter: 'blur(10px)',
-              zIndex: 1000,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '1.5rem'
-          }}>
-              <div className="loader-ring"></div>
-              <p style={{ fontSize: '1.25rem', fontWeight: 500, letterSpacing: '0.5px' }}>Analyzing your performance...</p>
-              <p style={{ opacity: 0.5, fontSize: '0.9rem' }}>OpenAI is evaluating your speech metrics and feedback.</p>
+          <div className="loading-overlay">
+              <div className="loader"></div>
+              <p>Analyzing Session...</p>
           </div>
       )}
 
-      <main className="dashboard-grid">
-        {/* Left Column: Recording and Transcript */}
-        <section className="dashboard-col">
-          {(currentPrompt || isGeneratingPrompt) && (
-            <div className="glass-panel" style={{ 
-              marginBottom: '1rem', 
-              padding: '1.2rem', 
-              background: 'linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%)',
-              borderLeft: '4px solid var(--accent)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '0.75rem',
-              minHeight: 'auto',
-              flex: 'none'
-            }}>
-              <div>
-                <span style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.8px', opacity: 0.6, fontWeight: 700 }}>
-                    <span>{taskType === 'repeat' ? 'Listening Exercise' : 'Active Scenario Prompt'}</span>
-                    {taskType === 'repeat' && promptQueue.length > 0 && (
-                        <span>Sentence {currentPromptIndex + 1} of {promptQueue.length}</span>
-                    )}
-                </span>
+      <main className="dashboard-content">
+        {/* TOP ROW: PROMPT & CONTROLS */}
+        <section className="top-section">
+            <div className="analytic-card prompt-card" style={{ display: 'flex', flexDirection: 'column' }}>
+                <header className="card-header row">
+                    <span className="card-tag">Current Exercise</span>
+                    <div className="status-pill">
+                        <div className={`status-dot ${isRecording ? 'active' : ''}`}></div>
+                        <span>{status}</span>
+                    </div>
+                </header>
                 
-                {taskType === 'repeat' || taskType === 'short' || taskType?.includes('fitb') ? (
-                  <div style={{ marginTop: '0.5rem' }}>
+                <div className="prompt-body" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '2rem 0' }}>
                     {isGeneratingPrompt ? (
-                        <p style={{ opacity: 0.5, fontStyle: 'italic', fontSize: '0.9rem' }}>Generating exercises...</p>
-                    ) : !hasPlayedTTS && !isPlayingTTS ? (
-                        <div style={{ padding: '1rem', textAlign: 'center', background: 'rgba(0,0,0,0.15)', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                           <p style={{ margin: '0 0 0.8rem', fontSize: '0.9rem', opacity: 0.8 }}>
-                               {taskType?.includes('fitb') ? 'Speak the FULL sentence and fill in the blank.' : taskType === 'short' ? 'You will hear a quick question. Speak your one-word answer immediately.' : 'You will hear a simulation voice. Repeat the sentence exactly.'}
-                           </p>
-                           <button className="btn btn-primary" onClick={handleStartAudioTask} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', margin: '0 auto', padding: '0.5rem 1rem', fontSize: '0.9rem' }}>
-                               ▶ Start Exercise
-                           </button>
-                        </div>
-                    ) : isPlayingTTS ? (
-                        <div style={{ padding: '1rem', textAlign: 'center', background: 'var(--primary-subtle)', borderRadius: '12px', color: 'var(--primary)', border: '1px solid var(--primary)' }}>
-                           <p style={{ fontWeight: 700, margin: 0, fontSize: '1rem', animation: 'pulse 1.5s infinite' }}>🔊 Listening...</p>
-                        </div>
+                        <div className="generating-shimmer">Developing simulation...</div>
                     ) : (
-                        <div style={{ marginTop: '0.3rem' }}>
-                           <p style={{ fontSize: '1.1rem', fontWeight: 500, fontStyle: 'normal', opacity: 1, lineHeight: '1.5' }}>
-                               {typeof currentPrompt === 'object' ? (currentPrompt.q || '') : getTargetAnnotation(currentPrompt, transcript + ' ' + (currentTurn || ''))}
-                           </p>
-                           {(taskType === 'short' || taskType?.includes('fitb')) && (
-                               <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                   {(() => {
-                                       const fullSpoken = (transcript + ' ' + (currentTurn || '')).trim();
-                                       if (!fullSpoken && isRecording) return <span style={{opacity: 0.5, fontSize: '0.8rem'}}>Listening for your full sentence...</span>;
-                                       if (!fullSpoken && !isRecording) return null;
-                                       
-                                       if (isVerifying) return <span style={{opacity: 0.5, fontSize: '0.8rem'}}>AI is verifying your logic...</span>;
-                                       
-                                       if (verificationResult) {
-                                           const { correct, feedback } = verificationResult;
-                                           return (
-                                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: correct ? 'rgba(105, 219, 124, 0.1)' : 'rgba(255, 107, 107, 0.1)', padding: '0.4rem 0.8rem', borderRadius: '8px', border: `1px solid ${correct ? '#69db7c44' : '#ff6b6b44'}` }}>
-                                                   <span style={{ fontSize: '1.2rem' }}>{correct ? '✅' : '❌'}</span>
-                                                   <span style={{ color: correct ? '#69db7c' : '#ff6b6b', fontWeight: 700, fontSize: '0.9rem' }}>
-                                                       {correct ? 'Correct!' : (feedback || 'Try again!')}
-                                                   </span>
-                                               </div>
-                                           );
-                                       }
-
-                                       return <span style={{opacity: 0.3, fontSize: '0.8rem'}}>Analyzing...</span>;
-                                   })()}
-                               </div>
-                           )}
+                        <div className="prompt-text" style={{ textAlign: 'center', fontSize: '2.4rem' }}>
+                            {typeof currentPrompt === 'object' ? currentPrompt.q : `"${currentPrompt}"`}
                         </div>
                     )}
-                  </div>
-                ) : (
-                  <p style={{ fontSize: '1.1rem', fontWeight: 500, marginTop: '0.4rem', lineHeight: '1.5', opacity: isGeneratingPrompt ? 0.5 : 1 }}>
-                    {isGeneratingPrompt ? "Generating a custom scenario with ChatGPT..." : `"${currentPrompt}"`}
-                  </p>
-                )}
-              </div>
-              <button 
-                onClick={handleNewPrompt} 
-                className="btn-link" 
-                style={{ alignSelf: 'flex-start', fontSize: '0.75rem', opacity: isGeneratingPrompt ? 0.4 : 0.7 }}
-                disabled={isGeneratingPrompt}
-              >
-                {isGeneratingPrompt ? '↻ Generating...' : '↻ Get another prompt'}
-              </button>
+                    
+                    {verificationResult && (
+                        <div className={`verification-badge ${verificationResult.correct ? 'success' : 'fail'}`} style={{ alignSelf: 'center', marginTop: '2rem' }}>
+                            {verificationResult.correct ? '✅ Awesome! Match Detected' : `❌ ${verificationResult.feedback}`}
+                        </div>
+                    )}
+                </div>
+
+                <div className="card-footer" style={{ borderTop: '1px solid #30363d', paddingTop: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
+                    <div className="left-controls" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                        <button className="btn-text-only" onClick={() => generateNewPrompt(selectedMode)}>
+                            ↻ Get another prompt
+                        </button>
+                        
+                        {!isRecording ? (
+                            <button className="btn-primary-small" onClick={startRecording}>
+                                <MicIcon isRecording={false} /> <span>Start Practice</span>
+                            </button>
+                        ) : (
+                            <button className="btn-stop-small" onClick={handleStopRecording}>
+                                <div className="stop-square-small"></div> <span>Stop Session</span>
+                            </button>
+                        )}
+                    </div>
+                    
+                    <div className="right-controls" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        {(transcript || chatHistory.length > 0) && !isRecording && (
+                            <button className="btn-finish-small" onClick={handleEndSession}>
+                                Finish & View Report
+                            </button>
+                        )}
+                        {taskType === 'repeat' && hasPlayedTTS && (
+                            <button className="btn-next-small" onClick={handleNextSentence}>Next Exercise →</button>
+                        )}
+                        <div className="mode-display">
+                            {customTitle || selectedMode?.title}
+                        </div>
+                    </div>
+                </div>
             </div>
-          )}
-
-          <div className="controls-card">
-            <button 
-              className="btn btn-primary" 
-              disabled={isRecording} 
-              onClick={startRecording}
-            >
-              Start Recording
-            </button>
-            <button 
-              className="btn btn-stop" 
-              disabled={!isRecording} 
-              onClick={handleStopRecording}
-            >
-              Stop Recording
-            </button>
-            {(!isRecording && (transcript || chatHistory.length > 0) && taskType !== 'repeat') && (
-              <button 
-                className="btn btn-primary" 
-                style={{ background: '#69db7c', color: '#000' }}
-                onClick={handleEndSession}
-                disabled={isAnalyzingSession}
-              >
-                {isAnalyzingSession ? 'Analyzing...' : 'End Session & Report'}
-              </button>
-            )}
-            {(hasPlayedTTS && (taskType === 'repeat' || taskType === 'short' || taskType?.includes('fitb'))) && (
-              <button 
-                className="btn btn-primary" 
-                style={{ background: '#69db7c', color: '#000' }}
-                onClick={handleNextSentence}
-                disabled={isAnalyzingSession || isPlayingTTS}
-              >
-                {currentPromptIndex < promptQueue.length - 1 ? (taskType === 'short' || taskType?.includes('fitb') ? 'Next Exercise' : 'Next Sentence') : 'Finish & View Report'}
-              </button>
-            )}
-            <div className="status-bar">
-              <div className="status-indicator">
-                <div className={`dot ${isRecording ? 'recording' : ''}`}></div>
-                <span id="statusText">{status}</span>
-              </div>
-              {/* Active Section Info Card */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                <span className="mode-tag" style={{ 
-                  fontSize: '0.75rem', 
-                  padding: '0.35rem 0.75rem', 
-                  borderRadius: '12px', 
-                  background: customTitle ? 'var(--primary-subtle)' : 'var(--surface-3)',
-                  color: customTitle ? 'var(--primary)' : 'var(--text-secondary)',
-                  fontWeight: 700,
-                  border: customTitle ? '1px solid var(--primary)' : '1px solid var(--border)'
-                }}>
-                  {customTitle || (selectedMode ? `${selectedMode.icon} ${selectedMode.title}` : 'Practice')}
-                </span>
-                <Link href={customTitle ? "/learning-path" : "/dashboard"} className="btn-link" style={{ fontSize: '0.75rem', opacity: 0.6 }}>
-                  {customTitle ? "← Back to Roadmap" : "Change"}
-                </Link>
-              </div>
-            </div>
-          </div>
-
-          <div className="glass-panel transcript-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', overflowY: 'auto' }}>
-            
-            {isAnalyzingAI && taskType !== 'repeat' && taskType !== 'short' && !taskType?.includes('fitb') && (
-              <div className="chat-message ai">
-                <span style={{ fontSize: '0.85rem', color: '#69db7c', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>OpenAI AI Coach</span>
-                <div style={{ fontSize: '1.1rem', lineHeight: '1.6', color: 'var(--text)' }}>
-                  <span style={{ fontStyle: 'italic', opacity: 0.7 }}>Typing response...</span>
-                </div>
-              </div>
-            )}
-
-            {(transcript || currentTurn) && (
-              <div className="chat-message user">
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>
-                  You {chatHistory.length > 0 ? <span style={{opacity: 0.5}}>(Speaking...)</span> : ''}
-                </span>
-                <div className="transcript-final" style={{ margin: 0 }}>
-                  {(() => {
-                      const fullSpoken = transcript + ' ' + (currentTurn || '');
-                      const cleanSpoken = fullSpoken.toLowerCase().replace(/[^\w\s]/g, '').trim();
-                      const promptText = typeof currentPrompt === 'object' ? (currentPrompt?.q || '') : (currentPrompt || '');
-                      const cleanTarget = promptText.toLowerCase().replace(/[^\w\s]/g, '').trim();
-                      const isMatch = cleanSpoken && cleanTarget && cleanSpoken === cleanTarget;
-                      
-                      if (taskType === 'repeat' && promptText) {
-                          if (isMatch) {
-                              return <span style={{ color: '#69db7c', display: 'inline-block' }}>{fullSpoken}</span>;
-                          }
-                          
-                          // Word by word highlighting
-                          const targetWords = promptText.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/);
-                          const spokenWordsRaw = fullSpoken.split(/\s+/);
-                          let targetIdx = 0;
-                          
-                          return spokenWordsRaw.map((rawWord, idx) => {
-                              const cleanWord = rawWord.toLowerCase().replace(/[^\w\s]/g, '');
-                              if (!cleanWord) return <span key={idx} style={{color: 'inherit'}}>{rawWord} </span>;
-                              
-                              let matched = false;
-                              for (let i = targetIdx; i < Math.min(targetIdx + 4, targetWords.length); i++) {
-                                  if (targetWords[i] === cleanWord) {
-                                      matched = true;
-                                      targetIdx = i + 1;
-                                      break;
-                                  }
-                              }
-                              
-                              if (!matched) {
-                                  if (!targetWords.includes(cleanWord)) {
-                                      return <span key={idx} style={{ color: '#ff6b6b' }}>{rawWord} </span>;
-                                  }
-                                  return <span key={idx} style={{ color: '#ffd43b' }} title="Out of order">{rawWord} </span>;
-                              }
-                              
-                              return <span key={idx} style={{ color: '#69db7c' }}>{rawWord} </span>;
-                          });
-                      }
-
-                      // Default rendering for other modes
-                      return (
-                          <span style={{ display: 'inline-block' }}>
-                              {transcript}
-                              <span className="transcript-partial" style={{ color: 'var(--text-muted)' }}>{currentTurn}</span>
-                          </span>
-                      );
-                  })()}
-                </div>
-              </div>
-            )}
-
-            {!transcript && !currentTurn && chatHistory.length === 0 && (
-              <div className="chat-message user">
-                <div className="transcript-final" style={{ margin: 0 }}>
-                  <span style={{ opacity: 0.5, fontStyle: 'italic' }}>Start speaking to see transcription...</span>
-                </div>
-              </div>
-            )}
-
-            {(taskType !== 'short' && !taskType?.includes('fitb')) && [...chatHistory].reverse().map((msg, idx) => (
-              <div key={idx} className={`chat-message ${msg.role}`}>
-                <span style={{ fontSize: '0.85rem', color: '#69db7c', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>
-                    {msg.role === 'ai' ? 'OpenAI AI Coach' : 'You'}
-                </span>
-                <div style={{ fontSize: msg.role === 'ai' ? '1.1rem' : '1.05rem', lineHeight: '1.6', color: 'var(--text)', margin: 0 }}>
-                    {msg.content}
-                </div>
-              </div>
-            ))}
-            
-          </div>
         </section>
 
-        {/* Right Column: Metrics and Analytics */}
-        <section className="dashboard-col">
-          {/* <LiveMonitor metrics={liveAnalysis} isRecording={isRecording} chatHistory={chatHistory} /> */}
-          
-          {taskType !== 'repeat' && (
-            <div className="filler-panel" style={{ padding: '1rem' }}>
-              <div className="filler-header">
-                <span className="filler-label">Breakdown</span>
-                <span className={`filler-total ${totalFillers > 0 ? 'has-fillers' : ''}`}>
-                  {totalFillers} total
-                </span>
-              </div>
-              <div className="filler-pills">
-                {Object.entries(fillerCounts).map(([word, count]) => (
-                  <div key={word} className={`pill ${count > 0 ? 'active' : ''}`} style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem' }}>
-                    {word} <span className="pill-count">{count}</span>
-                  </div>
-                ))}
-              </div>
+        {/* BOTTOM ROW: TRANSCRIPT & LIVE FEEDBACK */}
+        <section className="bottom-section">
+            <div className="analytic-card interaction-card">
+                <header className="card-header">
+                    <span className="card-tag">Live Transcription</span>
+                    <h3>The Conversation</h3>
+                </header>
+                <div className="transcript-area">
+                    {chatHistory.map((m, i) => (
+                        <div key={i} className={`msg ${m.role}`}>
+                            <label>{m.role === 'ai' ? 'COACH' : 'YOU'}</label>
+                            <p>{m.content}</p>
+                        </div>
+                    ))}
+                    {(transcript || currentTurn) && (
+                        <div className="msg user active">
+                            <label>YOU (SPEAKING)</label>
+                            <p>
+                                {transcript}
+                                <span className="partial">{currentTurn}</span>
+                            </p>
+                        </div>
+                    )}
+                    {!transcript && !currentTurn && chatHistory.length === 0 && (
+                        <div className="empty-chat">Your speech transcription will appear here in real-time.</div>
+                    )}
+                </div>
             </div>
-          )}
 
-          <div className="metrics-container">
-            <div className="metrics-layout">
-              <div className="stats-grid">
-                <div className="stat-card">
-                  <span className="stat-label">Words</span>
-                  <span className={`stat-value ${isRecording ? 'live' : ''}`}>{totalWords}</span>
-                </div>
-                <div className="stat-card">
-                  <span className="stat-label">Duration</span>
-                  <span className={`stat-value ${isRecording ? 'live' : ''}`}>{formatDuration(duration)}</span>
-                </div>
-                <div className="stat-card">
-                  <span className="stat-label">WPM</span>
-                  <span className={`stat-value ${isRecording ? 'live' : ''}`}>{wpm || '\u2014'}</span>
-                </div>
-                <div className="stat-card">
-                  <span className="stat-label">Errors</span>
-                  <span className={`stat-value ${grammarErrors > 0 ? 'has-errors' : ''}`}>{grammarErrors}</span>
-                </div>
-              </div>
-
-              <div className="stat-card stat-card-fluency" data-score={getFluencyScore(fluency)}>
-                <span className="stat-label">Fluency</span>
-                <div className="gauge-container">
-                    <svg className="gauge-svg" viewBox="0 0 100 100">
-                      <circle className="gauge-bg" cx="50" cy="50" r="45"></circle>
-                      <circle 
-                        className="gauge-progress" 
-                        cx="50" cy="50" r="45" 
-                        style={{ strokeDasharray: `${fluency * 2.83}, 283` }}
-                      ></circle>
-                    </svg>
-                    <span className="stat-value">{fluency}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="chart-card">
-            <span className="stat-label">Pace over time</span>
-            <div className="chart-container">
-              <PaceChart data={paceHistory.data} labels={paceHistory.labels} />
-            </div>
-          </div>
-
-          <SpeechAnalysisPanel metrics={liveAnalysis} isRecording={isRecording} />
-
-          {taskType !== 'repeat' && (
-            <div className="grammar-panel" style={{ borderLeft: '4px solid #ff6b6b', padding: '1rem' }}>
-              <span className="filler-label">Grammar Suggestions</span>
-              <div className="grammar-list" style={{ marginTop: '0.5rem' }}>
-                {grammarSuggestions.length === 0 ? (
-                  <div className="grammar-empty" style={{ fontSize: '0.85rem' }}>No suggestions yet. Start speaking!</div>
-                ) : (
-                  grammarSuggestions.map((s, i) => (
-                    <div key={i} className="grammar-item" style={{ padding: '0.6rem', background: 'var(--surface-2)', borderRadius: '8px', marginBottom: '0.4rem' }}>
-                      <span className="grammar-bad" style={{ color: '#ff6b6b', textDecoration: 'line-through', fontWeight: 'bold', fontSize: '0.9rem' }}>{s.bad}</span>
-                      {s.fix && <><span className="grammar-arrow" style={{ margin: '0 0.4rem', color: 'var(--text-muted)' }}>→</span><span className="grammar-fix" style={{ color: '#69db7c', fontWeight: 'bold', fontSize: '0.9rem' }}>{s.fix}</span></>}
-                      <p className="grammar-msg" style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem', marginBottom: 0 }}>{s.msg}</p>
+            <div className="analytic-card live-analysis-card">
+                <header className="card-header">
+                    <span className="card-tag">AI Insights</span>
+                    <h3>Live Metrics</h3>
+                </header>
+                <div className="live-metrics-compact">
+                    <div className="l-metric">
+                        <label>WPM</label>
+                        <div className="l-val">{wpm}</div>
                     </div>
-                  ))
-                )}
-              </div>
+                    <div className="l-metric">
+                        <label>FLUENCY</label>
+                        <div className="l-val highlight">{fluency}%</div>
+                    </div>
+                    <div className="l-metric">
+                        <label>ERRORS</label>
+                        <div className="l-val warning">{grammarErrors}</div>
+                    </div>
+                     <div className="l-metric">
+                        <label>TIME</label>
+                        <div className="l-val">{formatDuration(duration)}</div>
+                    </div>
+                </div>
+                <div className="mini-chart">
+                    <PaceChart data={paceHistory.data} labels={paceHistory.labels} compact />
+                </div>
+                <SpeechAnalysisPanel metrics={liveAnalysis} isRecording={isRecording} compact />
             </div>
-          )}
         </section>
       </main>
+
+      <style jsx>{`
+        .dashboard-wrapper {
+            background: #0d1117;
+            height: 100vh;
+            overflow-y: auto;
+            color: #e6edf3;
+            font-family: 'Outfit', sans-serif;
+        }
+        .dashboard-content {
+            padding: 1.5rem 4rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .loading-overlay {
+            position: fixed; inset: 0; background: rgba(13, 17, 23, 0.9); backdrop-filter: blur(10px);
+            z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem;
+        }
+        .loader { border: 4px solid #30363d; border-top: 4px solid #3b82f6; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .top-section { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
+        .prompt-card { min-height: 280px; }
+        
+        .bottom-section { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; }
+
+        .analytic-card {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 28px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            transition: all 0.3s cubic-bezier(0.2, 0, 0, 1);
+        }
+        .analytic-card:hover { border-color: rgba(68, 147, 248, 0.5); transform: translateY(-2px); }
+
+        .card-header { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; }
+        .card-header.row { flex-direction: row; justify-content: space-between; align-items: center; }
+        .card-tag { font-size: 0.75rem; font-weight: 800; color: #8b949e; text-transform: uppercase; letter-spacing: 0.1em; }
+        .card-header h3 { font-size: 1.25rem; font-weight: 700; margin: 0; color: #fff; }
+
+        .status-pill { display: flex; align-items: center; gap: 0.6rem; background: #161b22; padding: 0.4rem 1rem; border-radius: 100px; border: 1px solid #30363d; font-size: 0.75rem; font-weight: 700; }
+        .status-dot { width: 8px; height: 8px; background: #30363d; border-radius: 50%; }
+        .status-dot.active { background: #69db7c; box-shadow: 0 0 10px #69db7c; animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+
+        .btn-text-only { background: none; border: none; color: #4493f8; font-weight: 700; cursor: pointer; opacity: 0.7; transition: 0.2s; font-size: 0.95rem; }
+        .btn-text-only:hover { opacity: 1; text-decoration: underline; }
+        
+        .btn-primary-small {
+            display: flex; align-items: center; gap: 0.5rem;
+            background: #4493f8; color: #fff; border: none; border-radius: 12px;
+            padding: 0.6rem 1.25rem; font-weight: 700; cursor: pointer; transition: 0.2s; font-size: 0.95rem;
+            box-shadow: 0 4px 15px rgba(68, 147, 248, 0.25);
+        }
+        .btn-primary-small:hover { transform: scale(1.02); background: #58a6ff; }
+        .btn-primary-small svg { width: 16px; height: 16px; }
+        
+        .btn-stop-small {
+            display: flex; align-items: center; gap: 0.6rem;
+            background: #ff4b4b; color: #fff; border: none; border-radius: 12px;
+            padding: 0.6rem 1.25rem; font-weight: 700; cursor: pointer; transition: 0.2s; font-size: 0.95rem;
+            box-shadow: 0 4px 15px rgba(255, 75, 75, 0.25);
+        }
+        .btn-stop-small:hover { transform: scale(1.02); background: #ff7b72; }
+        .stop-square-small { width: 12px; height: 12px; background: #fff; border-radius: 2px; }
+
+        .btn-finish-small { background: #238636; color: #fff; border: none; border-radius: 10px; padding: 0.5rem 1.2rem; font-weight: 700; cursor: pointer; transition: 0.2s; font-size: 0.9rem;}
+        .btn-finish-small:hover { background: #2ea043; }
+        
+        .btn-next-small { background: #161b22; color: #e6edf3; border: 1px solid #30363d; border-radius: 10px; padding: 0.5rem 1.2rem; font-weight: 700; cursor: pointer; transition: 0.2s; font-size: 0.9rem;}
+        .btn-next-small:hover { background: #1f242c; }
+
+        .mode-display { font-size: 0.75rem; font-weight: 800; color: #8b949e; text-transform: uppercase; background: #161b22; padding: 0.35rem 0.8rem; border-radius: 8px; border: 1px solid #30363d; }
+
+
+        .transcript-area { height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 1.5rem; padding-right: 1rem; }
+        .transcript-area::-webkit-scrollbar { width: 4px; }
+        .transcript-area::-webkit-scrollbar-thumb { background: #30363d; border-radius: 10px; }
+
+        .msg label { font-size: 0.7rem; font-weight: 800; color: #8b949e; letter-spacing: 0.1em; display: block; margin-bottom: 0.4rem; }
+        .msg p { font-size: 1.15rem; line-height: 1.6; margin: 0; color: #e6edf3; }
+        .msg.ai p { color: #58a6ff; font-weight: 600; }
+        .msg.user.active p { color: #fff; }
+        .partial { opacity: 0.5; color: #8b949e; }
+        .empty-chat { height: 100%; display: flex; align-items: center; justify-content: center; text-align: center; opacity: 0.3; font-style: italic; }
+
+        .live-metrics-compact { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+        .l-metric { background: #161b22; padding: 1rem; border-radius: 16px; border: 1px solid #30363d; }
+        .l-metric label { font-size: 0.65rem; font-weight: 800; color: #8b949e; display: block; margin-bottom: 0.3rem; }
+        .l-val { font-size: 1.6rem; font-weight: 800; color: #fff; }
+        .l-val.highlight { color: #4493f8; }
+        .l-val.warning { color: #ff7b72; }
+        
+        .verification-badge { margin-top: 1rem; padding: 0.75rem 1.25rem; border-radius: 12px; font-weight: 700; font-size: 0.9rem; }
+        .verification-badge.success { background: rgba(105, 219, 124, 0.1); color: #69db7c; border: 1px solid rgba(105, 219, 124, 0.2); }
+        .verification-badge.fail { background: rgba(255, 107, 107, 0.1); color: #ff6b6b; border: 1px solid rgba(255, 107, 107, 0.2); }
+
+      `}</style>
     </div>
   );
 }
 
-export default function Home() {
+export default function DashboardPage() {
   return (
-    <Suspense fallback={<div>Loading dashboard...</div>}>
+    <Suspense fallback={<div>Loading...</div>}>
       <DashboardContent />
     </Suspense>
   );

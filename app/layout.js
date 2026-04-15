@@ -1,4 +1,4 @@
-import { Inter, Newsreader } from 'next/font/google';
+import { Inter, Outfit } from 'next/font/google';
 import './globals.css';
 
 const inter = Inter({
@@ -7,11 +7,11 @@ const inter = Inter({
   variable: '--font-inter',
 });
 
-const newsreader = Newsreader({
+const outfit = Outfit({
   subsets: ['latin'],
   display: 'swap',
-  variable: '--font-serif',
-  style: ['normal', 'italic'],
+  variable: '--font-outfit',
+  weight: ['300', '400', '500', '600', '700'],
 });
 
 export const metadata = {
@@ -21,7 +21,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={`${inter.variable} ${newsreader.variable}`}>
+    <html lang="en" className={`${inter.variable} ${outfit.variable}`}>
       <body>{children}</body>
     </html>
   );

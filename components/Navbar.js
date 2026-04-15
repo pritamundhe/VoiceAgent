@@ -85,21 +85,67 @@ export default function Navbar({ mode }) {
                 </div>
 
                 {user ? (
-                    <div className="user-menu" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <Link href="/profile" style={{ fontSize: '0.9rem', color: 'var(--text)', fontWeight: 600, textDecoration: 'none', cursor: 'pointer' }}>Hello, {user.name}</Link>
+                    <div className="user-menu" style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+                        <Link href="/profile" style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '0.75rem',
+                            textDecoration: 'none',
+                            padding: '0.4rem 0.8rem',
+                            borderRadius: '20px',
+                            background: 'rgba(255,255,255,0.05)',
+                            transition: 'all 0.3s ease'
+                        }}>
+                             <div style={{ 
+                                 width: '32px', 
+                                 height: '32px', 
+                                 borderRadius: '50%', 
+                                 background: user.image ? 'none' : 'linear-gradient(135deg, #6366f1, #a855f7)', 
+                                 display: 'flex', 
+                                 alignItems: 'center', 
+                                 justifyContent: 'center', 
+                                 fontSize: '0.8rem', 
+                                 fontWeight: 'bold',
+                                 overflow: 'hidden',
+                                 border: '2px solid rgba(255,255,255,0.1)'
+                             }}>
+                                {user.image ? (
+                                    <img src={user.image} alt={user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                    user.name?.charAt(0).toUpperCase()
+                                )}
+                             </div>
+                             <span style={{ fontSize: '0.85rem', color: 'var(--text)', fontWeight: 600 }}>{user.name}</span>
+                        </Link>
                         {user.rank && (
                             <Link href="/learning-path" style={{ textDecoration: 'none' }}>
-                                <span style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem', borderRadius: '12px', background: 'var(--accent)', color: '#000', fontWeight: 'bold', cursor: 'pointer' }}>
-                                    {user.rank} | {user.xp || 0} XP
+                                <span style={{ 
+                                    fontSize: '0.7rem', 
+                                    padding: '0.3rem 0.75rem', 
+                                    borderRadius: '20px', 
+                                    background: 'var(--text)', 
+                                    color: 'var(--bg)', 
+                                    fontWeight: '800', 
+                                    letterSpacing: '0.5px',
+                                    textTransform: 'uppercase'
+                                }}>
+                                    {user.rank}
                                 </span>
                             </Link>
                         )}
-                        <button onClick={handleSignout} className="nav-link" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Sign Out</button>
                     </div>
                 ) : (
                     <div className="auth-links" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                         <Link href="/auth/signin" className="nav-link">Sign In</Link>
-                        <Link href="/auth/signup" className="nav-link">Sign Up</Link>
+                        <Link href="/auth/signup" style={{ 
+                            background: 'var(--text)', 
+                            color: 'var(--bg)', 
+                            padding: '0.5rem 1.25rem', 
+                            borderRadius: '20px', 
+                            fontSize: '0.85rem', 
+                            fontWeight: '700', 
+                            textDecoration: 'none' 
+                        }}>Get Started</Link>
                     </div>
                 )}
 

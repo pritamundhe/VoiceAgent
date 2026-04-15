@@ -6,11 +6,11 @@ import { LEARNING_PATH, SPEAKING_TASKS, READING_TASKS, LISTENING_TASKS } from '.
 import { useRouter } from 'next/navigation';
 // ── Config
 const PART_CONFIG = { speaking: SPEAKING_TASKS, reading: READING_TASKS, listening: LISTENING_TASKS };
-const RANK_ORDER  = ['Newbie', 'Beginner', 'Intermediate', 'Advanced', 'Expert', 'Master'];
+const RANK_ORDER = ['Newbie', 'Beginner', 'Intermediate', 'Advanced', 'Expert', 'Master'];
 
 const TASK_MAPS = {
-  speaking:  Object.fromEntries(SPEAKING_TASKS.questionTypes.map(t => [t.id, t])),
-  reading:   Object.fromEntries(READING_TASKS.questionTypes.map(t => [t.id, t])),
+  speaking: Object.fromEntries(SPEAKING_TASKS.questionTypes.map(t => [t.id, t])),
+  reading: Object.fromEntries(READING_TASKS.questionTypes.map(t => [t.id, t])),
   listening: Object.fromEntries(LISTENING_TASKS.questionTypes.map(t => [t.id, t])),
 };
 const getTask = (part, id) => TASK_MAPS[part]?.[id] || null;
@@ -53,260 +53,156 @@ const Icon = ({ name, size = 16, className = '', color = 'currentColor' }) => {
   const path = PATHS[name];
   if (!path) return null;
   return (
-    <svg 
-      width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} 
-      strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" 
-      className={className} dangerouslySetInnerHTML={{ __html: path }} 
+    <svg
+      width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color}
+      strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"
+      className={className} dangerouslySetInnerHTML={{ __html: path }}
     />
   );
 };
 
 // ════════════════════════════════════════════════
-// MODULE CARD — individual task card in the grid
+// MODULE CARD — exact UI replica of the requested aesthetic
 // ════════════════════════════════════════════════
 function ModuleCard({ mission, unlocked, isPassed, onStart, activeTab }) {
-  const [open, setOpen] = useState(false);
   if (activeTab !== 'all' && mission.part !== activeTab) return null;
 
-  const cfg  = PART_CONFIG[mission.part];
+  const cfg = PART_CONFIG[mission.part];
   const task = getTask(mission.part, mission.taskType);
 
-  const borderColor = isPassed
-    ? `${cfg.color}55`
-    : unlocked
-    ? 'var(--border)'
-    : 'transparent';
+  const palette = {
+      speaking:  { bg: 'rgba(34, 197, 94, 0.15)',  text: '#22c55e', label: 'Low', realLabel:'Speaking' },
+      reading:   { bg: 'rgba(239, 68, 68, 0.12)',  text: '#ef4444', label: 'High', realLabel:'Reading' },
+      listening: { bg: 'rgba(168, 85, 247, 0.15)', text: '#a855f7', label: 'Medium', realLabel:'Listening' }
+  };
+  const theme = palette[mission.part] || palette.speaking;
+
+  // Fake stats for aesthetic mimicry
+  const total = mission.part === 'speaking' ? 5 : 3;
+  const current = isPassed ? total : (mission.part === 'speaking' ? 2 : 0);
+  const progressPercent = (current / total) * 100;
 
   return (
-    <div style={{
-      background: unlocked ? 'var(--surface)' : 'var(--surface-3)',
-      border: `1.5px solid ${borderColor}`,
-      borderRadius: 'var(--radius-md)',
-      padding: '1rem',
-      opacity: unlocked ? 1 : 0.5,
-      transition: 'all 0.25s ease',
-      boxShadow: unlocked ? 'var(--shadow-sm)' : 'none',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '0.6rem',
-      position: 'relative',
-      overflow: 'hidden',
-    }}>
-      {/* Accent top stripe */}
-      {unlocked && (
-        <div style={{
-          position: 'absolute', top: 0, left: 0, right: 0, height: 3,
-          background: isPassed ? cfg.colorVar : `${cfg.colorVar}55`,
-          borderRadius: '3px 3px 0 0',
-        }} />
-      )}
-
-      {/* Row 1: Part badge + status */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.15rem' }}>
+    <div 
+      onClick={() => onStart(mission)}
+      style={{
+        background: 'var(--surface-2)',
+        border: '1px solid var(--border)',
+        borderRadius: '16px',
+        padding: '1.25rem 1.25rem 1rem 1.25rem',
+        opacity: unlocked ? 1 : 0.6,
+        transition: 'all 0.3s ease',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
+        display: 'flex',
+        flexDirection: 'column',
+        cursor: unlocked ? 'pointer' : 'not-allowed',
+        textDecoration: 'none'
+      }}
+      onMouseEnter={e => {
+          if(unlocked) {
+            e.currentTarget.style.transform = 'translateY(-4px)';
+            e.currentTarget.style.boxShadow = '0 12px 24px rgba(0,0,0,0.08)';
+            e.currentTarget.style.borderColor = theme.text;
+          }
+      }}
+      onMouseLeave={e => {
+          if(unlocked) {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.03)';
+            e.currentTarget.style.borderColor = 'var(--border)';
+          }
+      }}
+    >
+      <div style={{ marginBottom: '0.85rem' }}>
         <span style={{
-          fontSize: '0.72rem', fontWeight: 700, padding: '0.12rem 0.5rem',
-          borderRadius: '9999px', background: cfg.bgVar,
-          color: cfg.colorVar, border: `1px solid ${cfg.color}33`,
-          display: 'flex', alignItems: 'center', gap: '0.25rem',
+          background: theme.bg,
+          color: theme.text,
+          padding: '0.25rem 0.75rem',
+          borderRadius: '9999px',
+          fontSize: '0.75rem',
+          fontWeight: '700',
+          letterSpacing: '0.02em',
+          display: 'inline-block'
         }}>
-          <Icon name={cfg.icon} size={14} /> {cfg.label}
+          {theme.label}
+        </span>
+      </div>
+
+      <h3 style={{ 
+        margin: '0 0 0.3rem 0', 
+        fontSize: '1.05rem', 
+        fontWeight: '800', 
+        color: 'var(--text)',
+        lineHeight: 1.3
+      }}>
+        {mission.title}
+      </h3>
+      <p style={{ 
+        margin: '0 0 1.25rem 0', 
+        fontSize: '0.85rem', 
+        color: 'var(--text-muted)', 
+        fontWeight: '500',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis'
+      }}>
+        {task ? task.label : mission.desc}
+      </p>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '600' }}>
+          <Icon name="Target" size={14} color="currentColor" /> Viewings
+        </span>
+        <span style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--text)' }}>
+          {current}/{total}
+        </span>
+      </div>
+
+      <div style={{ 
+        height: '3px', 
+        background: 'var(--border)', 
+        borderRadius: '3px', 
+        marginBottom: '1.25rem', 
+        overflow: 'hidden',
+        width: '100%'
+      }}>
+        <div style={{ 
+          width: `${progressPercent}%`, 
+          height: '100%', 
+          background: theme.text,
+          borderRadius: '3px',
+          transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)'
+        }} />
+      </div>
+
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        borderTop: '1px solid var(--border)', 
+        paddingTop: '0.85rem',
+        marginTop: 'auto'
+      }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '500' }}>
+           <Icon name="Clock" size={12} /> {cfg.duration} Mins
         </span>
 
-        {isPassed ? (
-          <span style={{ color: 'var(--accent-green)', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.78rem', fontWeight: 700 }}>
-            <Icon name="Check" size={14} /> Done
-          </span>
-        ) : !unlocked ? (
-          <span style={{ color: 'var(--text-muted)' }}><Icon name="Lock" size={15} /></span>
-        ) : null}
-      </div>
-
-      {/* Row 2: Title */}
-      <div>
-        <h3 style={{ margin: '0 0 0.25rem', fontSize: '0.92rem', fontWeight: 700, color: 'var(--text)', lineHeight: 1.3 }}>
-          {mission.title}
-        </h3>
-        <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-          {mission.desc}
-        </p>
-      </div>
-
-      {/* Row 3: Task type + duration */}
-      {task && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-          <span style={{
-            fontSize: '0.72rem', fontWeight: 700, padding: '0.12rem 0.5rem',
-            borderRadius: '9999px', background: task.bg,
-            color: task.color, border: `1px solid ${task.color}33`,
-            display: 'flex', alignItems: 'center', gap: '0.2rem',
-          }}>
-            <Icon name={task.icon} size={13} /> {task.label}
-          </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-            <Icon name="Clock" size={13} /> {cfg.duration} min
-          </span>
-        </div>
-      )}
-
-      {/* Row 4: Scoring focus pills */}
-      {mission.scoringFocus && (
-        <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          {mission.scoringFocus.map(c => {
-            const ev = cfg.evaluation.find(e => e.label === c);
-            return (
-              <span key={c} style={{
-                fontSize: '0.72rem', fontWeight: 700, padding: '0.1rem 0.45rem',
-                borderRadius: '9999px', background: cfg.bgVar,
-                color: cfg.colorVar, border: `1px solid ${cfg.color}33`,
-                display: 'flex', alignItems: 'center', gap: '0.2rem',
-              }}>
-                {ev && <Icon name={ev.icon} size={12} />} {c}
-              </span>
-            );
-          })}
-          {/* 0-5 pips (speaking only) */}
-          {mission.part === 'speaking' && (
-            <div style={{ display: 'flex', gap: '2px', alignItems: 'center', marginLeft: '2px' }}>
-              {[1,2,3,4,5].map(n => (
-                <div key={n} style={{
-                  width: 6, height: 6, borderRadius: '50%',
-                  background: n <= 3 ? cfg.colorVar : 'var(--border)',
-                }} />
-              ))}
-              <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginLeft: '2px' }}>/5</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Row 5: Tip */}
-      {mission.tip && (
-        <div style={{
-          padding: '0.4rem 0.65rem',
-          borderRadius: 'var(--radius-sm)',
-          background: 'var(--accent-orange-bg)',
-          border: '1px solid rgba(255,181,71,0.3)',
-          fontSize: '0.8rem', color: 'var(--accent-orange)',
-          display: 'flex', gap: '0.35rem', lineHeight: 1.4,
-        }}>
-          <span style={{ flexShrink: 0 }}>💡</span>
-          <span>{mission.tip}</span>
-        </div>
-      )}
-
-      {/* Row 6: Actions */}
-      {unlocked && (
-        <div style={{ display: 'flex', gap: '0.4rem', marginTop: 'auto', paddingTop: '0.25rem' }}>
-          <button
-            onClick={() => onStart(mission)}
-            style={{
-              flex: 1,
-              background: `linear-gradient(135deg, ${cfg.colorVar} 0%, ${cfg.color} 100%)`,
-              color: '#fff', border: 'none',
-              padding: '0.5rem 0.75rem', borderRadius: '9999px',
-              fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem',
-              boxShadow: `0 3px 10px ${cfg.color}44`,
-              transition: 'all 0.2s ease', fontFamily: 'inherit',
-            }}
-            onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-            onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-          >
-            {isPassed ? 'Redo' : 'Begin'} <Icon name="ArrowRight" size={14} />
-          </button>
-
-          <button
-            onClick={() => setOpen(o => !o)}
-            style={{
-              background: 'var(--surface-3)', border: '1px solid var(--border)',
-              borderRadius: '9999px', padding: '0.5rem 0.65rem',
-              fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer',
-              color: 'var(--text-muted)', fontFamily: 'inherit',
-              display: 'flex', alignItems: 'center', gap: '0.25rem',
-              transition: 'all 0.18s ease',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = cfg.colorVar; e.currentTarget.style.color = cfg.colorVar; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
-          >
-            <Icon name={cfg.icon} size={15} /> 
-            <span style={{ transform: open ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s', display: 'flex' }}>
-              <Icon name="ChevronDown" size={15} />
-            </span>
-          </button>
-        </div>
-      )}
-
-      {/* Expandable task detail */}
-      {open && (
-        <div style={{
-          padding: '0.85rem', borderRadius: 'var(--radius-sm)',
-          background: 'var(--surface-3)', border: '1px solid var(--border)',
-          display: 'flex', flexDirection: 'column', gap: '0.65rem',
-          animation: 'fadeIn 0.2s ease',
-          fontSize: '0.85rem',
-        }}>
-          {/* Scoring */}
-          <div>
-            <div style={{ fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: '0.72rem', letterSpacing: '0.07em', marginBottom: '0.35rem' }}>
-              Scoring
-            </div>
-            <p style={{ color: 'var(--text-muted)', margin: '0 0 0.45rem', lineHeight: 1.5, fontSize: '0.85rem' }}>
-              {cfg.scoring.description}
-            </p>
-            {cfg.scoring.type === 'scale' ? (
-              <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
-                {cfg.scoring.levels.map(({ score, label, color }) => (
-                  <span key={score} style={{
-                    padding: '0.15rem 0.5rem', borderRadius: '9999px',
-                    background: 'var(--surface)', border: '1px solid var(--border)',
-                    fontSize: '0.75rem',
-                  }}>
-                    <span style={{ fontWeight: 800, color }}>{score}</span>
-                    <span style={{ color: 'var(--text-muted)' }}> {label}</span>
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                {cfg.scoring.types.map(({ label, icon, color }) => (
-                  <span key={label} style={{
-                    padding: '0.2rem 0.55rem', borderRadius: '9999px',
-                    background: 'var(--surface)', border: '1px solid var(--border)',
-                    fontSize: '0.75rem', display: 'flex', gap: '0.25rem', alignItems: 'center',
-                  }}>
-                    <span style={{ color }}><Icon name={icon} size={12} /></span>
-                    <span style={{ color: 'var(--text-muted)' }}>{label}</span>
-                  </span>
-                ))}
-              </div>
-            )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          
+          <div style={{ display: 'flex', marginRight: '0.2rem' }}>
+            <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#f59e0b', border: '2px solid var(--surface-2)', zIndex: 3 }}></div>
+            <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#3b82f6', border: '2px solid var(--surface-2)', marginLeft: '-8px', zIndex: 2 }}></div>
+            <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#ef4444', border: '2px solid var(--surface-2)', marginLeft: '-8px', zIndex: 1 }}></div>
           </div>
 
-          {/* Evaluation criteria */}
-          <div>
-            <div style={{ fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: '0.72rem', letterSpacing: '0.07em', marginBottom: '0.35rem' }}>
-              Evaluation
-            </div>
-            <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
-              {cfg.evaluation.map(({ label, icon }) => {
-                const focus = mission.scoringFocus?.includes(label);
-                return (
-                  <span key={label} style={{
-                    padding: '0.2rem 0.55rem', borderRadius: '9999px',
-                    background: focus ? cfg.bgVar : 'var(--surface)',
-                    border: `1px solid ${focus ? cfg.color + '55' : 'var(--border)'}`,
-                    color: focus ? cfg.colorVar : 'var(--text-muted)',
-                    fontWeight: focus ? 700 : 500, fontSize: '0.75rem',
-                    display: 'flex', gap: '0.25rem', alignItems: 'center',
-                  }}>
-                    <Icon name={icon} size={12} /> {label}
-                  </span>
-                );
-              })}
-            </div>
-          </div>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem', fontWeight: '600' }}>
+            <Icon name="ClipboardList" size={12} /> {mission.scoringFocus?.length || 3}
+          </span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem', fontWeight: '600' }}>
+            <Icon name="MessageCircle" size={12} /> {(mission.title.length % 5) + 2}
+          </span>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -316,46 +212,54 @@ function ModuleCard({ mission, unlocked, isPassed, onStart, activeTab }) {
 // PART OVERVIEW CARD (filter tabs at top)
 // ════════════════════════════════════════════════
 function PartCard({ config, active, onClick }) {
+  const palette = {
+      speaking:  { bg: 'rgba(34, 197, 94, 0.15)',  text: '#22c55e', realLabel: 'Part I' },
+      reading:   { bg: 'rgba(239, 68, 68, 0.12)',  text: '#ef4444', realLabel: 'Part II' },
+      listening: { bg: 'rgba(168, 85, 247, 0.15)', text: '#a855f7', realLabel: 'Part III' }
+  };
+  const theme = palette[config.label.toLowerCase()] || palette.speaking;
+
+  const subtitleStr = `${config.duration} min • ` + config.evaluation.map(e => e.label).join(', ');
+
   return (
-    <button onClick={onClick} style={{
-      flex: '1 1 160px',
-      padding: '0.9rem 1rem',
-      borderRadius: 'var(--radius-md)',
-      border: active ? `2px solid ${config.color}` : '1.5px solid var(--border)',
-      background: active ? config.bgVar : 'var(--surface)',
-      cursor: 'pointer', textAlign: 'left',
-      transition: 'all 0.2s ease',
-      boxShadow: active ? `0 4px 18px ${config.color}22` : 'var(--shadow-sm)',
-      position: 'relative', overflow: 'hidden',
-    }}>
-      {active && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: config.colorVar }} />}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
-        <span style={{ color: config.colorVar }}><Icon name={config.icon} size={24} /></span>
-        <div>
-          <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: active ? config.colorVar : 'var(--text-muted)' }}>
-            Part {config.part}
-          </div>
-          <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>{config.label}</div>
-        </div>
+    <div 
+      onClick={onClick}
+      style={{
+        flex: '1 1 200px',
+        background: 'var(--surface-2)',
+        border: active ? `2px solid ${theme.text}` : '2px solid transparent',
+        borderBottom: active ? `2px solid ${theme.text}` : '2px solid transparent',
+        borderRadius: '16px',
+        padding: '1.25rem',
+        cursor: 'pointer', 
+        textAlign: 'left',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        boxShadow: active ? `0 12px 32px rgba(0,0,0,0.1)` : '0 4px 12px rgba(0,0,0,0.03)',
+        transform: active ? 'translateY(-4px)' : 'translateY(0)'
+      }}
+    >
+      <div style={{ marginBottom: '0.85rem' }}>
+        <span style={{
+          background: theme.bg,
+          color: theme.text,
+          padding: '0.25rem 0.75rem',
+          borderRadius: '9999px',
+          fontSize: '0.75rem',
+          fontWeight: '700',
+          letterSpacing: '0.02em',
+          display: 'inline-block'
+        }}>
+          {theme.realLabel}
+        </span>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.45rem' }}>
-        <Icon name="Clock" size={13} /> {config.duration} min
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
-        {config.evaluation.map(e => (
-          <span key={e.label} style={{
-            fontSize: '0.75rem', fontWeight: 700, padding: '0.12rem 0.45rem',
-            borderRadius: '9999px',
-            background: active ? 'rgba(255,255,255,0.55)' : 'var(--surface-3)',
-            color: active ? config.colorVar : 'var(--text-muted)',
-            border: `1px solid ${active ? config.color + '44' : 'var(--border)'}`,
-            display: 'flex', alignItems: 'center', gap: '0.2rem'
-          }}>
-            <Icon name={e.icon} size={11} /> {e.label}
-          </span>
-        ))}
-      </div>
-    </button>
+
+      <h3 style={{ margin: '0 0 0.3rem 0', fontSize: '1.1rem', fontWeight: '800', color: 'var(--text)' }}>
+        {config.label}
+      </h3>
+      <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '500', lineHeight: 1.4 }}>
+        {subtitleStr}
+      </p>
+    </div>
   );
 }
 
@@ -363,8 +267,8 @@ function PartCard({ config, active, onClick }) {
 // MAIN PAGE
 // ════════════════════════════════════════════════
 export default function LearningPathPage() {
-  const [progress,  setProgress]  = useState(null);
-  const [loading,   setLoading]   = useState(true);
+  const [progress, setProgress] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('all');
   const router = useRouter();
 
@@ -391,23 +295,23 @@ export default function LearningPathPage() {
   };
 
   const TABS = [
-    { id: 'all',       label: 'All Parts', icon: 'Layers' },
-    { id: 'speaking',  label: 'Speaking',  icon: 'Mic' },
-    { id: 'reading',   label: 'Reading',   icon: 'BookOpen' },
+    { id: 'all', label: 'All Parts', icon: 'Layers' },
+    { id: 'speaking', label: 'Speaking', icon: 'Mic' },
+    { id: 'reading', label: 'Reading', icon: 'BookOpen' },
     { id: 'listening', label: 'Listening', icon: 'AudioLines' },
   ];
 
   // Count modules per section for active filter stats
   const allMods = LEARNING_PATH.flatMap(l => l.modules);
   const counts = {
-    all:       allMods.length,
-    speaking:  allMods.filter(m => m.part === 'speaking').length,
-    reading:   allMods.filter(m => m.part === 'reading').length,
+    all: allMods.length,
+    speaking: allMods.filter(m => m.part === 'speaking').length,
+    reading: allMods.filter(m => m.part === 'reading').length,
     listening: allMods.filter(m => m.part === 'listening').length,
   };
 
   // Flatten all modules for a global grid instead of grouped by level
-  const allMissions = LEARNING_PATH.flatMap(level => 
+  const allMissions = LEARNING_PATH.flatMap(level =>
     level.modules.map(mod => ({
       ...mod,
       levelId: level.level,
@@ -418,7 +322,7 @@ export default function LearningPathPage() {
 
   const getMissionStatus = (rankRequired) => {
     const currentIdx = RANK_ORDER.indexOf(progress?.rank || 'Newbie');
-    const reqIdx     = RANK_ORDER.indexOf(rankRequired);
+    const reqIdx = RANK_ORDER.indexOf(rankRequired);
     return {
       unlocked: true, // Always unlocked
       isPassed: currentIdx > reqIdx
@@ -462,24 +366,49 @@ export default function LearningPathPage() {
 
           {/* XP Widget */}
           <div style={{
-            background: 'var(--surface)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-md)', padding: '0.7rem 1rem',
-            minWidth: '200px', boxShadow: 'var(--shadow-sm)',
+            background: 'var(--surface-2)', 
+            border: '1px solid var(--border)',
+            borderRadius: '16px', 
+            padding: '0.85rem 1.15rem',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '1rem'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '0.4rem' }}>
-              <span style={{ color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Rank</span>
-              <span style={{ color: 'var(--accent-green)', fontWeight: 700 }}>⚡ {progress?.rank || 'Newbie'}</span>
+            {/* Rank Icon Bubble */}
+            <div style={{ 
+              width: '42px', height: '42px', 
+              borderRadius: '12px', 
+              background: 'linear-gradient(135deg, rgba(250, 204, 21, 0.15) 0%, rgba(245, 158, 11, 0.15) 100%)', 
+              border: '1px solid rgba(250, 204, 21, 0.25)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', 
+              fontSize: '1.3rem', flexShrink: 0,
+              boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.1)'
+            }}>
+              ⚡
             </div>
-            <div style={{ height: 6, background: 'var(--surface-3)', borderRadius: '9999px', overflow: 'hidden', marginBottom: '0.3rem' }}>
-              <div style={{
-                width: `${Math.min(100, ((progress?.xp || 0) / (progress?.targetXp || 500)) * 100)}%`,
-                height: '100%',
-                background: 'linear-gradient(90deg, var(--primary), var(--primary-light))',
-                borderRadius: '9999px', transition: 'width 1s ease',
-              }} />
-            </div>
-            <div style={{ textAlign: 'right', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-              {progress?.xp || 0} / {progress?.targetXp || 500} XP
+
+            {/* Stats */}
+            <div style={{ display: 'flex', flexDirection: 'column', minWidth: '165px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.01em' }}>
+                  {progress?.rank || 'Newbie'}
+                </span>
+                <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#f59e0b' }}>
+                  {progress?.xp || 0} <span style={{ color: 'var(--text-muted)' }}>/ {progress?.targetXp || 500}</span>
+                </span>
+              </div>
+              
+              <div style={{ height: '5px', background: 'var(--border)', borderRadius: '5px', overflow: 'hidden', width: '100%' }}>
+                <div style={{
+                  width: `${Math.min(100, ((progress?.xp || 0) / (progress?.targetXp || 500)) * 100)}%`,
+                  height: '100%',
+                  background: 'linear-gradient(90deg, #facc15, #f59e0b)',
+                  borderRadius: '5px', 
+                  transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)',
+                  boxShadow: '0 0 10px rgba(250, 204, 21, 0.4)'
+                }} />
+              </div>
             </div>
           </div>
         </div>

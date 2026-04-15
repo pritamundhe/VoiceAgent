@@ -1,4 +1,4 @@
-import { generateOpenAIContent } from '../../lib/openai';
+import { generateOpenAIContent } from '../../../lib/openai';
 
 export async function POST(request) {
     try {
