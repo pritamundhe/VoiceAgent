@@ -25,12 +25,13 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
     const wpm = duration > 0 ? Math.round(totalWords / (duration / 60)) : 0;
     
     const fluency = useMemo(() => {
+        if (totalWords === 0) return 0;
         let score = 100;
         score -= (totalFillers * 2);
         score -= (grammarErrors * 5);
         if (wpm > 0 && (wpm < 110 || wpm > 180)) score -= 10;
         return Math.max(0, score);
-    }, [totalFillers, grammarErrors, wpm]);
+    }, [totalFillers, grammarErrors, wpm, totalWords]);
 
     const [liveAnalysis, setLiveAnalysis] = useState({
         energy: 0,

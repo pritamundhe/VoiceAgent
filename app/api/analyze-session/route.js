@@ -128,6 +128,29 @@ Return ONLY the JSON. No conversational text.
                         return 'Newbie';
                     };
                     
+                    // --- STREAK LOGIC ---
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+
+                    const lastActiveDate = user.lastActive ? new Date(user.lastActive) : null;
+                    if (lastActiveDate) {
+                        lastActiveDate.setHours(0, 0, 0, 0);
+                    }
+
+                    const diffTime = lastActiveDate ? today.getTime() - lastActiveDate.getTime() : null;
+                    const diffDays = diffTime !== null ? Math.floor(diffTime / (1000 * 60 * 60 * 24)) : null;
+
+                    if (diffDays === null) {
+                        user.streak = 1;
+                    } else if (diffDays === 1) {
+                        user.streak = (user.streak || 0) + 1;
+                    } else if (diffDays > 1) {
+                        user.streak = 1;
+                    }
+                    // if diffDays === 0, streak remains same (already active today)
+
+                    user.lastActive = new Date();
+
                     const newRank = getRank(user.xp);
                     if (newRank !== user.rank) {
                         user.level = (user.level || 1) + 1;
@@ -141,7 +164,8 @@ Return ONLY the JSON. No conversational text.
                         xpGained,
                         currentXp: user.xp,
                         currentLevel: user.level,
-                        rank: user.rank
+                        rank: user.rank,
+                        streak: user.streak
                     };
                     console.log(`   - User ${userId} gained ${xpGained} XP. Now Rank: ${user.rank} (${user.xp} XP)`);
                 }

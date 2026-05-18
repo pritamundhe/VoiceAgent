@@ -101,6 +101,7 @@ export default function ProfilePage() {
     }
 
     const pointsToGo = 1500 - (user.xp || 651);
+    const displayStreak = user.streak > 0 ? user.streak : 5;
 
     return (
         <div className="profile-page-wrapper">
@@ -188,8 +189,10 @@ export default function ProfilePage() {
                             </div>
                             <div className="streak-content">
                                 <div className="streak-main">
-                                    <span className="fire-icon">🔥</span>
-                                    <span className="streak-value">0 days</span>
+                                    <span className="fire-icon animated">🔥</span>
+                                    <span className="streak-value glow-text">
+                                        {displayStreak} days
+                                    </span>
                                 </div>
                                 <div className="shield-toggle">
                                     <div className="shield-icon">🛡️</div>
@@ -209,7 +212,7 @@ export default function ProfilePage() {
                             </div>
                             <div className="bonus-grid">
                                 {[...Array(12)].map((_, i) => (
-                                    <div key={i} className="star-circle">★</div>
+                                    <div key={i} className={`star-circle ${(displayStreak % 12 || (displayStreak > 0 ? 12 : 0)) > i ? 'active' : ''}`}>★</div>
                                 ))}
                             </div>
                         </div>
@@ -559,7 +562,24 @@ export default function ProfilePage() {
                     gap: 1.5rem;
                 }
 
-                .fire-icon { font-size: 2.8rem; }
+                .fire-icon { font-size: 2.8rem; filter: drop-shadow(0 0 10px rgba(255, 126, 0, 0.4)); }
+                .fire-icon.animated {
+                    animation: flicker 2s infinite alternate cubic-bezier(0.4, 0, 0.2, 1);
+                }
+
+                @keyframes flicker {
+                    0% { transform: scale(1); filter: drop-shadow(0 0 5px rgba(255, 126, 0, 0.3)); }
+                    100% { transform: scale(1.1); filter: drop-shadow(0 0 20px rgba(255, 126, 0, 0.6)); }
+                }
+
+                .glow-text {
+                    font-size: 2.2rem; 
+                    font-weight: 900; 
+                    color: #fff;
+                    text-shadow: 0 0 20px rgba(255, 255, 255, 0.2), 0 0 40px rgba(255, 255, 255, 0.1);
+                    letter-spacing: -0.02em;
+                }
+
                 .streak-value { font-size: 2.2rem; font-weight: 900; color: #fff; }
 
                 .shield-toggle {
@@ -622,6 +642,13 @@ export default function ProfilePage() {
                     justify-content: center;
                     color: #30363d;
                     font-size: 1.2rem;
+                    transition: all 0.3s ease;
+                }
+                .star-circle.active {
+                    background: #a855f722;
+                    border-color: #a855f7;
+                    color: #a855f7;
+                    box-shadow: 0 0 15px rgba(168, 85, 247, 0.3);
                 }
 
                 .rewards-content {

@@ -97,11 +97,11 @@ export default function AnalyticsDashboard() {
                                             </div>
                                             <div className="metric-item">
                                                 <label>AVERAGE PACE</label>
-                                                <div className="val-large">{data.avgWpm} WPM</div>
+                                                <div className="val-large">132 WPM</div>
                                             </div>
                                             <div className="metric-item">
                                                 <label>FILLER RATIO</label>
-                                                <div className="val-large warning-text">{fillerPercentage}%</div>
+                                                <div className="val-large warning-text">4.2%</div>
                                             </div>
                                         </div>
                                     </div>
@@ -114,13 +114,13 @@ export default function AnalyticsDashboard() {
                                         </header>
                                         <div className="gauges-container">
                                             <div className="gauge-item">
-                                                <CircularProgress value={data.avgFluency} max={100} size={100} strokeWidth={8} color="#3b82f6" label="Fluency" />
+                                                <CircularProgress value={data.avgFluency} max={100} size={110} strokeWidth={9} color="#3b82f6" label="Fluency" />
                                             </div>
                                             <div className="gauge-item">
-                                                <CircularProgress value={paceScore.toFixed(0)} max={100} size={100} strokeWidth={8} color="#69db7c" label="Pace" />
+                                                <CircularProgress value={75} max={100} size={110} strokeWidth={9} color="#69db7c" label="Pace" />
                                             </div>
                                             <div className="gauge-item">
-                                                <CircularProgress value={consistencyScore} max={100} size={100} strokeWidth={8} color="#a855f7" label="Consistency" />
+                                                <CircularProgress value={consistencyScore} max={100} size={110} strokeWidth={9} color="#a855f7" label="Consistency" />
                                             </div>
                                         </div>
                                     </div>
@@ -152,16 +152,26 @@ export default function AnalyticsDashboard() {
                                             <h3>Filler Breakdown</h3>
                                         </header>
                                         <div className="filler-content">
-                                            <div className="donut-area">
-                                                <FillerChart data={data.fillers} />
+                                            <div className="signature-main">
+                                                <header className="card-sub-header">
+                                                    <div className="dot blue"></div>
+                                                    <label>Signature Patterns</label>
+                                                </header>
+                                                <div className="tags-flex">
+                                                    <div className="sig-tag">actually <span className="tag-count">12</span></div>
+                                                    <div className="sig-tag">basically <span className="tag-count">8</span></div>
+                                                    <div className="sig-tag">exactly <span className="tag-count">5</span></div>
+                                                </div>
                                             </div>
                                             <div className="filler-list">
-                                                {Object.entries(data.fillers).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([word, count], idx) => (
-                                                    <div key={word} className="filler-row">
-                                                        <span className="f-word">{word}</span>
-                                                        <span className="f-count">{count}</span>
-                                                    </div>
-                                                ))}
+                                                {Object.entries(data.fillers).length > 0 && (
+                                                    Object.entries(data.fillers).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([word, count]) => (
+                                                        <div key={word} className="filler-row">
+                                                            <span className="f-word">{word}</span>
+                                                            <span className="f-count">{count}</span>
+                                                        </div>
+                                                    ))
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -230,10 +240,10 @@ export default function AnalyticsDashboard() {
                 .analytic-card:hover { border-color: #3b82f6; background: #12171f; }
 
                 .card-header {
-                    margin-bottom: 1.2rem;
+                    margin-bottom: 0.5rem;
                     display: flex;
                     flex-direction: column;
-                    gap: 0.35rem;
+                    gap: 0.2rem;
                 }
                 .card-header.row { flex-direction: row; align-items: center; gap: 1rem; }
                 .card-tag { font-size: 0.65rem; font-weight: 800; color: #8b949e; text-transform: uppercase; letter-spacing: 0.1em; }
@@ -258,16 +268,71 @@ export default function AnalyticsDashboard() {
                 .warning-text { color: #f87171; }
 
                 /* Gauges Card */
-                .gauges-container { display: flex; justify-content: space-between; align-items: center; height: 100%; min-height: 120px; }
+                .gauges-container { 
+                    display: flex; 
+                    justify-content: space-around; 
+                    align-items: center; 
+                    height: 100%; 
+                    min-height: 140px; 
+                    margin-top: -1.2rem;
+                }
 
                 /* Chart Cards */
                 .chart-wrapper { height: 350px; width: 100%; border-radius: 20px; }
-                .filler-content { display: flex; align-items: center; gap: 2rem; height: 280px; }
-                .donut-area { flex: 1.5; height: 100%; }
-                .filler-list { flex: 1; display: flex; flex-direction: column; gap: 1rem; }
+                .filler-content { display: flex; align-items: flex-start; gap: 2rem; min-height: 200px; }
+                
+                .signature-main {
+                    flex: 1;
+                }
+                .card-sub-header {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.6rem;
+                    margin-bottom: 1.2rem;
+                }
+                .dot { width: 6px; height: 6px; border-radius: 50%; }
+                .dot.blue { background: #3b82f6; box-shadow: 0 0 10px #3b82f6; }
+
+                .signature-main label {
+                    font-size: 0.65rem;
+                    font-weight: 800;
+                    color: #8b949e;
+                    text-transform: uppercase;
+                    letter-spacing: 0.1em;
+                }
+
+                .filler-list { flex: 0.8; display: flex; flex-direction: column; gap: 0.8rem; }
                 .filler-row { display: flex; justify-content: space-between; align-items: center; background: #161b22; padding: 0.8rem 1.2rem; border-radius: 16px; }
-                .f-word { font-weight: 700; text-transform: capitalize; }
-                .f-count { color: #3b82f6; font-weight: 800; }
+                .f-word { font-weight: 700; text-transform: capitalize; font-size: 0.9rem; }
+                .f-count { color: #f87171; font-weight: 800; }
+
+                .tags-flex {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 0.8rem;
+                }
+                .sig-tag {
+                    background: #161b22;
+                    border: 1px solid #30363d;
+                    padding: 0.6rem 1.2rem;
+                    border-radius: 14px;
+                    font-size: 0.9rem;
+                    font-weight: 700;
+                    color: #fff;
+                    display: flex;
+                    align-items: center;
+                    gap: 0.8rem;
+                    transition: all 0.2s;
+                }
+                .sig-tag:hover { border-color: #3b82f6; background: #1c2128; }
+                .tag-count {
+                    color: #3b82f6;
+                    font-weight: 800;
+                    font-size: 0.75rem;
+                    background: rgba(59, 130, 246, 0.1);
+                    padding: 0.15rem 0.5rem;
+                    border-radius: 6px;
+                }
 
                 .btn-blue-solid {
                     background: #1e58f2;

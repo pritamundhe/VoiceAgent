@@ -132,30 +132,52 @@ export function CircularProgress({ value, max = 100, label, subLabel, color = '#
   const strokeDashoffset = circumference - percent * circumference;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.8rem' }}>
-      <div style={{ position: 'relative', width: size, height: size }}>
-        <svg fill="none" width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-          {/* Background circle */}
-          <circle cx={size/2} cy={size/2} r={radius} stroke="var(--surface-3)" strokeWidth={strokeWidth} />
-          {/* Progress circle */}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.6rem', position: 'relative' }}>
+      <div style={{ position: 'relative', width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <svg fill="none" width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }}>
+          {/* Subtle track */}
+          <circle 
+            cx={size/2} cy={size/2} r={radius} 
+            stroke="rgba(255,255,255,0.03)" 
+            strokeWidth={strokeWidth} 
+          />
+          {/* Elegant Progress line */}
           <circle 
             cx={size/2} cy={size/2} r={radius} 
             stroke={color} strokeWidth={strokeWidth} 
             strokeDasharray={circumference} 
             strokeDashoffset={strokeDashoffset}
             strokeLinecap="round"
-            transform={`rotate(-90 ${size/2} ${size/2})`}
-            style={{ transition: 'stroke-dashoffset 1.5s ease-out' }}
+            style={{ 
+                transition: 'stroke-dashoffset 1.8s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                filter: `drop-shadow(0 0 2px ${color})`
+            }}
           />
         </svg>
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.6rem', fontWeight: 600, color: 'var(--text)' }}>
-          {value}{max === 100 ? '%' : ''}
+
+        <div style={{ 
+            position: 'absolute', 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            justifyContent: 'center'
+        }}>
+          <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff', letterSpacing: '-0.03em' }}>
+            {value}<span style={{ fontSize: '0.75rem', opacity: 0.6, marginLeft: '1px' }}>{max === 100 ? '%' : ''}</span>
+          </span>
         </div>
       </div>
+
       {(label || subLabel) && (
         <div style={{ textAlign: 'center' }}>
-            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>{label}</p>
-            {subLabel && <p style={{ margin: '0.2rem 0 0 0', fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>{subLabel}</p>}
+            <p style={{ 
+                margin: 0, 
+                fontSize: '0.6rem', 
+                fontWeight: 700, 
+                color: '#8b949e', 
+                textTransform: 'uppercase', 
+                letterSpacing: '0.08em'
+            }}>{label}</p>
         </div>
       )}
     </div>

@@ -17,9 +17,9 @@ const SpeechAnalysisPanel = ({ metrics, isRecording }) => {
         <div className="diagnostic-metric">
             <span className="diagnostic-label">{label}: {(value / 100).toFixed(3)}</span>
             <div className="diagnostic-bar-container">
-                <div 
-                    className="diagnostic-bar-fill" 
-                    style={{ 
+                <div
+                    className="diagnostic-bar-fill"
+                    style={{
                         width: `${Math.min(100, Math.max(0, value))}%`,
                         backgroundColor: status.color
                     }}
@@ -38,28 +38,7 @@ const SpeechAnalysisPanel = ({ metrics, isRecording }) => {
             </div>
 
             <div className="diagnostic-body">
-                <MetricBar label="Speech Energy" value={energy} />
-                <MetricBar label="Pace Stability" value={stability} />
-                <MetricBar label="Pause Quality" value={pauseQuality} />
-                <MetricBar label="Articulation" value={clarity} />
-                <MetricBar label="Consistency" value={(stability + clarity) / 2} />
-            </div>
-
-            <div className="diagnostic-footer">
-                <div className="diagnostic-legend">
-                    <div className="legend-row">
-                        <span className="legend-dot" style={{ backgroundColor: '#80c000' }}></span>
-                        <span>Calm</span>
-                    </div>
-                    <div className="legend-row">
-                        <span className="legend-dot" style={{ backgroundColor: '#ff9000' }}></span>
-                        <span>Mild</span>
-                    </div>
-                    <div className="legend-row">
-                        <span className="legend-dot" style={{ backgroundColor: '#ff0055' }}></span>
-                        <span>High</span>
-                    </div>
-                </div>
+                <MetricBar label="Energy" value={energy} />
             </div>
         </div>
     );

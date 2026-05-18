@@ -14,7 +14,7 @@ export async function GET(request) {
         }
 
         const decoded = jwt.verify(token, JWT_SECRET);
-        const user = await User.findById(decoded.userId).select('xp level rank name image');
+        const user = await User.findById(decoded.userId).select('xp level rank name image streak');
 
         if (!user) {
             return Response.json({ error: 'User not found' }, { status: 404 });
@@ -36,6 +36,7 @@ export async function GET(request) {
             image: user.image,
             xp: user.xp || 0,
             level: user.level || 1,
+            streak: user.streak || 0,
             rank: user.rank || 'Newbie',
             targetXp
         });

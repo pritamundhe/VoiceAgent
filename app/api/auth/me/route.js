@@ -17,7 +17,7 @@ export async function GET(request) {
     
     await dbConnect();
     const user = await User.findById(decoded.userId)
-      .select('name email image followers following rank xp level')
+      .select('name email image followers following rank xp level streak')
       .populate('following', 'name email image');
     
     if (!user) {
@@ -33,6 +33,7 @@ export async function GET(request) {
         rank: user.rank,
         xp: user.xp,
         level: user.level,
+        streak: user.streak || 0,
         followerCount: user.followers?.length || 0,
         followingCount: user.following?.length || 0,
         followers: user.followers || [],
