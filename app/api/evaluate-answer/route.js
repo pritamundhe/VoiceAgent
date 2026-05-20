@@ -42,9 +42,9 @@ ${historyText}
 Follow-up attempt number: ${followUpCount}
 
 Criteria for SATISFIED:
-- Response is relevant to the question
-- Has at least 2-3 sentences or meaningful content
-- Shows effort
+- Response is relevant to the question in any way, even loosely
+- Accept short or casual answers (e.g., "ok ok", "yes", or brief thoughts)
+- Do NOT be overly strict. If it relates to the topic, mark as SATISFIED.
 
 TASK:
 1. Determine if you are SATISFIED with the answer.

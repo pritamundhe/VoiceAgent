@@ -1,41 +1,42 @@
+import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+
 export async function POST(req) {
     try {
-        const { text, voiceId = 'EXAVITQu4vr4xnSDxMaL' } = await req.json(); // Bella voice as default
-        
-        if (!process.env.ELEVENLABS_API_KEY) {
+        const { text, voiceId = 'JBFqnCBsd6RMkjVDRZzb' } = await req.json(); // George voice
+
+        const apiKey = process.env.ELEVENLABS_API_KEY;
+        console.log('[TTS] API Key present:', !!apiKey, '| Key prefix:', apiKey?.slice(0, 10));
+
+        if (!apiKey) {
+            console.error('[TTS] No ElevenLabs API key found in env!');
             return Response.json({ error: 'No ElevenLabs API key' }, { status: 500 });
         }
-        
-        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'xi-api-key': process.env.ELEVENLABS_API_KEY
-            },
-            body: JSON.stringify({
-                text,
-                model_id: "eleven_turbo_v2_5", // Using turbo v2.5 for free tier support and speed
-                voice_settings: {
-                    stability: 0.5,
-                    similarity_boost: 0.75
-                }
-            })
+
+        const client = new ElevenLabsClient({ apiKey });
+
+        console.log(`[TTS] Using voice: ${voiceId}, model: eleven_v3`);
+
+        const audioStream = await client.textToSpeech.convert(voiceId, {
+            text,
+            modelId: "eleven_v3",
+            outputFormat: "mp3_44100_128",
         });
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`ElevenLabs error (${response.status}): ${errorText}`);
+        // Collect the stream into a buffer
+        const chunks = [];
+        for await (const chunk of audioStream) {
+            chunks.push(chunk);
         }
-        
-        const arrayBuffer = await response.arrayBuffer();
-        
-        return new Response(arrayBuffer, {
-            headers: {
-                'Content-Type': 'audio/mpeg'
-            }
+        const audioBuffer = Buffer.concat(chunks);
+
+        console.log(`[TTS] Success, audio size: ${audioBuffer.length} bytes`);
+
+        return new Response(audioBuffer, {
+            headers: { 'Content-Type': 'audio/mpeg' },
         });
-    } catch(err) {
-        console.error('TTS generation error:', err);
+
+    } catch (err) {
+        console.error('[TTS] Error:', err.message, err?.body || '');
         return Response.json({ error: err.message }, { status: 500 });
     }
 }

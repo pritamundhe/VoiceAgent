@@ -246,7 +246,19 @@ function DashboardContent() {
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ text: txt })
                             });
-                            if (!ttsRes.ok) return;
+                            if (!ttsRes.ok) {
+                                const errText = await ttsRes.text();
+                                console.warn('ElevenLabs TTS failed, using browser TTS:', ttsRes.status, errText);
+                                return new Promise((resolve) => {
+                                    const utterance = new SpeechSynthesisUtterance(txt);
+                                    utterance.rate = 1.0;
+                                    utterance.pitch = 1.0;
+                                    utterance.onend = resolve;
+                                    utterance.onerror = resolve;
+                                    window.speechSynthesis.cancel();
+                                    window.speechSynthesis.speak(utterance);
+                                });
+                            }
                             const blob = await ttsRes.blob();
                             const url = URL.createObjectURL(blob);
                             if (audioRef.current) audioRef.current.pause();
@@ -437,7 +449,18 @@ function DashboardContent() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text: textToPlay })
             });
-            if (!res.ok) throw new Error('Failed to fetch audio');
+            if (!res.ok) {
+                const errText = await res.text();
+                console.warn('ElevenLabs TTS failed, using browser TTS:', res.status, errText);
+                const utterance = new SpeechSynthesisUtterance(textToPlay);
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                utterance.onend = () => setIsPlayingAudio(false);
+                utterance.onerror = () => setIsPlayingAudio(false);
+                window.speechSynthesis.cancel();
+                window.speechSynthesis.speak(utterance);
+                return;
+            }
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);
             if (audioRef.current) {
@@ -734,7 +757,7 @@ function DashboardContent() {
                             {/* Live speech — always shown at very top */}
                             {(transcript || currentTurn) && (
                                 <div className="msg user active" style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-                                    <div style={{ fontSize: '1.5rem', background: 'rgba(105,219,124,0.1)', padding: '0.4rem', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>👤</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', background: 'rgba(105,219,124,0.1)', padding: '0.4rem', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>U</div>
                                     <div style={{ flex: 1 }}>
                                         <label>YOU (SPEAKING)</label>
                                         <p style={{ lineHeight: 1.75 }}>
@@ -753,7 +776,7 @@ function DashboardContent() {
                             {/* Typing Indicator if AI is evaluating */}
                             {isEvaluating && (
                                 <div className="msg ai" style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-                                    <div style={{ fontSize: '1.5rem', background: 'rgba(68,147,248,0.1)', padding: '0.4rem', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: 'drop-shadow(0 0 5px rgba(68,147,248,0.3))' }}>🤖</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', background: 'rgba(68,147,248,0.1)', padding: '0.4rem', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: 'drop-shadow(0 0 5px rgba(68,147,248,0.3))' }}>AI</div>
                                     <div style={{ flex: 1 }}>
                                         <label>AI COACH</label>
                                         <div style={{ display: 'flex', gap: '5px', marginTop: '10px' }}>
@@ -768,8 +791,8 @@ function DashboardContent() {
                             {/* Chat history reversed — newest first */}
                             {[...chatHistory].reverse().map((m, i) => (
                                 <div key={i} className={`msg ${m.role}`} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-                                    <div style={{ fontSize: '1.5rem', background: m.role === 'ai' ? 'rgba(68,147,248,0.1)' : 'rgba(105,219,124,0.1)', padding: '0.4rem', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        {m.role === 'ai' ? '🤖' : '👤'}
+                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', background: m.role === 'ai' ? 'rgba(68,147,248,0.1)' : 'rgba(105,219,124,0.1)', padding: '0.4rem', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        {m.role === 'ai' ? 'AI' : 'U'}
                                     </div>
                                     <div style={{ flex: 1 }}>
                                         <label>{m.role === 'ai' ? 'AI COACH' : 'YOU'}</label>

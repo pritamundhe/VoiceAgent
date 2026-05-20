@@ -191,9 +191,8 @@ export default function SessionReport() {
                 <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#c084fc' }}>+{xpData.xpGained} XP</span>
                 <div><div style={{ fontSize: '0.65rem', color: '#a855f7', fontWeight: 700, textTransform: 'uppercase' }}>Earned</div><div style={{ fontSize: '0.8rem', color: '#8b949e' }}>Rank: {xpData.rank}</div></div>
               </div>
-              {xpData.streak > 0 && <div style={{ background: 'rgba(240,165,0,0.1)', border: '1px solid rgba(240,165,0,0.25)', borderRadius: '12px', padding: '0.6rem 1.2rem' }}>
-                <span style={{ fontSize: '1.3rem' }}>🔥</span>
-                <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#f0a500', marginLeft: '0.4rem' }}>{xpData.streak} day streak</span>
+              {xpData.streak > 0 && <div style={{ background: 'rgba(240,165,0,0.1)', border: '1px solid rgba(240,165,0,0.25)', borderRadius: '12px', padding: '0.6rem 1.2rem', display: 'flex', alignItems: 'center' }}>
+                <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#f0a500' }}>{xpData.streak} day streak</span>
               </div>}
               {xpData.newBadges?.map(b => (
                 <div key={b.id} style={{ background: 'rgba(105,219,124,0.1)', border: '1px solid rgba(105,219,124,0.25)', borderRadius: '12px', padding: '0.6rem 1.2rem' }}>
@@ -208,16 +207,15 @@ export default function SessionReport() {
         {/* ═══ 5 METRIC CARDS ═══ */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
           {[
-            { label: 'Total Words', value: m.totalWords ?? 0, icon: '📝', color: '#4493f8' },
-            { label: 'Avg Pace', value: `${m.wpm ?? 0} WPM`, icon: '⚡', color: '#69db7c' },
-            { label: 'Fluency Score', value: `${m.fluencyScore ?? 0}%`, icon: '✨', color: '#a855f7' },
-            { label: 'Filler Rate', value: `${fillerRate}%`, icon: '⚠️', color: m.totalFillers > 5 ? '#ff6b6b' : '#f0a500' },
-            { label: 'Duration', value: formatDur(m.duration ?? 0), icon: '⏱️', color: '#79c0ff' },
-          ].map(({ label, value, icon, color }) => (
+            { label: 'Total Words', value: m.totalWords ?? 0, color: '#4493f8' },
+            { label: 'Avg Pace', value: `${m.wpm ?? 0} WPM`, color: '#69db7c' },
+            { label: 'Fluency Score', value: `${m.fluencyScore ?? 0}%`, color: '#a855f7' },
+            { label: 'Filler Rate', value: `${fillerRate}%`, color: m.totalFillers > 5 ? '#ff6b6b' : '#f0a500' },
+            { label: 'Duration', value: formatDur(m.duration ?? 0), color: '#79c0ff' },
+          ].map(({ label, value, color }) => (
             <div key={label} style={{ background: '#161b22', border: '1px solid #30363d', borderRadius: '16px', padding: '1.25rem', textAlign: 'center', transition: 'transform 0.2s, border-color 0.2s' }}
               onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.borderColor = color + '44'; }}
               onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.borderColor = '#30363d'; }}>
-              <div style={{ fontSize: '1.4rem', marginBottom: '0.4rem' }}>{icon}</div>
               <div style={{ fontSize: '1.5rem', fontWeight: 800, color, marginBottom: '0.25rem' }}>{value}</div>
               <div style={{ fontSize: '0.7rem', color: '#8b949e', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>
             </div>
@@ -408,12 +406,12 @@ export default function SessionReport() {
           <Link href='/practice' style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: 'linear-gradient(135deg, #4493f8, #79c0ff)', color: '#0d1117', borderRadius: '14px', padding: '0.9rem 2rem', fontWeight: 800, fontSize: '1rem', textDecoration: 'none', boxShadow: '0 4px 20px rgba(68,147,248,0.3)', transition: 'transform 0.2s, box-shadow 0.2s' }}
             onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 30px rgba(68,147,248,0.4)'; }}
             onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(68,147,248,0.3)'; }}>
-            🎤 Practice Again
+            Practice Again
           </Link>
           <Link href='/analytics' style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: '#161b22', color: '#e6edf3', border: '1px solid #30363d', borderRadius: '14px', padding: '0.9rem 2rem', fontWeight: 700, fontSize: '1rem', textDecoration: 'none', transition: 'border-color 0.2s' }}
             onMouseEnter={e => e.currentTarget.style.borderColor = '#4493f8'}
             onMouseLeave={e => e.currentTarget.style.borderColor = '#30363d'}>
-            📊 View All Analytics
+            View All Analytics
           </Link>
         </div>
 
