@@ -1,4 +1,5 @@
 import { generateOpenAIContent } from '../../../lib/openai';
+import { MODES } from '../../../lib/modes';
 
 export async function POST(request) {
     try {
@@ -8,17 +9,73 @@ export async function POST(request) {
             return Response.json({ error: 'OPENAI_API_KEY is not configured' }, { status: 500 });
         }
 
+        // Find the mode configuration to fetch sample prompts
+        const modeObj = MODES.find(m => m.id === modeId || m.title === modeTitle);
+        const samplePrompts = modeObj?.prompts || [];
+        const samplesText = samplePrompts.length > 0
+            ? `Here are some example prompts/scenarios for this practice mode to show the context, style, and scope:\n${samplePrompts.slice(0, 5).map(p => `- "${p}"`).join('\n')}`
+            : '';
+
         let prompt = `You are a creative prompt generator for a speech practice application.
-Produce exactly ONE creative, simple, and relatable scenario prompt for the practice mode: "${modeTitle}" (${description}).
-IMPORTANT: The topic MUST be very common and easy to understand for everyone (e.g., daily life, common experiences, basic opinions). Avoid hard, niche, or overly technical topics.
-The prompt MUST BE EXTREMELY SHORT (under 12 words) and direct. Do not include any additional commentary, quotation marks, or prefixes. Make it specific and unique every time.`;
+Produce exactly ONE creative, specific, and relatable scenario prompt for the practice mode: "${modeTitle}" (${description}).
+
+${samplesText}
+
+Guidelines:
+1. Do NOT choose generic topics like "A memorable vacation", "favorite hobbies", or "traveling" unless the mode is explicitly about travel or networking small talk.
+2. The prompt must fit the theme of "${modeTitle}" perfectly and be inspired by the examples above (but not identical).
+3. The prompt MUST BE EXTREMELY SHORT (under 12 words) and direct. Do not include any additional commentary, quotation marks, or prefixes.
+4. Make it specific, creative, and unique every time (e.g., use different roles, scenarios, or industries in successive runs).`;
 
         if (generateQueue) {
-            prompt = `You are a professional conversational coach and English tutor.
-For the practice mode: "${modeTitle}" (${description}), choose ONE specific, simple, clear, and relatable topic (e.g., "A memorable vacation", "Dealing with a busy workday", "Pitching a food delivery app").
-Then, generate exactly 10 simple, clear, direct, and conversational questions that are all strictly relevant to that chosen topic.
+            if (part === 'reading' || part === 'listening') {
+                prompt = `You are an English tutor generating practice material for a ${part} exercise.
+You are generating practice content for the practice mode: "${modeTitle}" (${description}).
 
-Requirements:
+Task: Choose ONE specific, creative, and relatable topic.
+Generate exactly 10 short, engaging sentences or very short paragraphs (under 15 words each) about this topic that the student must listen to or read, and then accurately repeat or transcribe.
+DO NOT ASK QUESTIONS. Generate statements, facts, or narrative sentences.
+
+Output ONLY a raw JSON object and NOTHING ELSE. Do NOT wrap in markdown code blocks.
+
+JSON Structure:
+{
+  "topic": "The specific topic chosen",
+  "questions": [
+    "Sentence 1 to read aloud.",
+    "Sentence 2 to read aloud.",
+    "Sentence 3 to read aloud.",
+    "Sentence 4 to read aloud.",
+    "Sentence 5 to read aloud.",
+    "Sentence 6 to read aloud.",
+    "Sentence 7 to read aloud.",
+    "Sentence 8 to read aloud.",
+    "Sentence 9 to read aloud.",
+    "Sentence 10 to read aloud."
+  ]
+}`;
+            } else {
+                prompt = `You are a professional conversational coach and English tutor.
+You are generating practice questions for the practice mode: "${modeTitle}" (${description}).
+
+${samplesText}
+
+Task: Choose ONE specific, creative, and relatable topic or scenario that fits the theme of "${modeTitle}" perfectly.
+Guidelines for topic selection:
+1. Do NOT choose generic topics like "A memorable vacation", "favorite hobbies", or "traveling" unless the mode is explicitly about travel or networking small talk.
+2. The topic must be highly specific to "${modeTitle}".
+   - If the mode is "Job Interview", choose a specific role (e.g. Project Manager, Customer Service Representative, Data Analyst) and a scenario (e.g., explaining how you handle a project delay, answering a strength/weakness question).
+   - If the mode is "Pitch", choose a specific startup idea, project, or concept to pitch (e.g., pitching a smart compost bin, pitching a local grocery delivery service).
+   - If the mode is "Negotiation", choose a specific negotiation scenario (e.g., negotiating flexible hours, vendor contract pricing).
+   - If the mode is "Sales Pitch", choose a specific product or service to sell.
+   - If the mode is "Stories", choose a specific story prompt (e.g., describing a time you had to make a quick decision).
+   - If the mode is "Conflict Resolution", choose a workplace disagreement scenario.
+3. Make the chosen topic specific, clear, and relatable (under 10 words, e.g., "Answering behavioral questions for a software engineer interview" or "Negotiating contract terms with a freelance client").
+4. Choose a different, unique topic every time. Use a different industry, role, or context (e.g., technology, healthcare, education, retail, finance).
+
+Once you have chosen the topic, generate exactly 10 simple, clear, direct, and conversational questions that are all strictly relevant to that chosen topic.
+
+Requirements for questions:
 1. Every question must be extremely simple and easy for a beginner/intermediate student to understand and answer.
 2. Every question must directly relate to the chosen topic.
 3. The questions should progress naturally (e.g., introducing the topic, describing a scenario, sharing an opinion, discussing challenges, reflecting on future ideas).
@@ -41,6 +98,7 @@ JSON Structure:
     "Question 10"
   ]
 }`;
+            }
         } else if (taskType === 'repeat') {
             prompt = `You are a beginner-friendly English tutor.
 Generate EXACTLY 5 very simple, easy-to-understand sentences for a beginner student to listen to and repeat.
@@ -59,7 +117,16 @@ Each sentence must have ONE clear blank represented by "___".
 Output ONLY a raw JSON array of 5 objects and NOTHING ELSE. No markdown formatting, no code blocks.
 Structure: [{"q": "The apple is ___ in color.", "a": "red"}, ...]`;
         } else if (taskType && part) {
-            prompt = `You are an expert ${part.toUpperCase()} examiner algorithm.
+            if (part === 'reading' || part === 'listening') {
+                prompt = `You are an expert ${part.toUpperCase()} examiner algorithm.
+Generate exactly ONE extremely short, highly realistic practice text for a student to listen to or read for the following task:
+Task Name: ${modeTitle}
+Task Description: ${description}
+
+The text MUST be a statement, fact, or short narrative. DO NOT ask a question.
+OUTPUT ONLY THE TEXT. No quotes, no intro, under 15 words. Make it different every time.`;
+            } else {
+                prompt = `You are an expert ${part.toUpperCase()} examiner algorithm.
 Generate exactly ONE extremely short, highly realistic practice prompt for a student doing the following task:
 Exam Section: ${part.toUpperCase()}
 Task Name: ${modeTitle}
@@ -67,6 +134,7 @@ Task Description: ${description}
 
 The prompt MUST BE specific to the task format. For example, if it's "Describe an Event", ask them to describe a specific event.
 OUTPUT ONLY THE PROMPT TEXT. No quotes, no intro, under 15 words. Make it different every time.`;
+            }
         }
 
         const responseText = await generateOpenAIContent(prompt, { model: 'gpt-4o-mini' });

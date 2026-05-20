@@ -51,8 +51,8 @@ body {
     font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, sans-serif;
     background: var(--bg);
     color: var(--text);
-    height: 100vh;
-    overflow: hidden;
+    min-height: 100vh;
+    overflow-x: hidden;
     margin: 0;
     padding: 0;
 }

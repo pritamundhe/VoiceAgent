@@ -17,7 +17,7 @@ const MODE_CONTEXTS = {
 
 export async function POST(request) {
     try {
-        const { question, answer, followUpCount = 0, mode = '', modeTitle = '' } = await request.json();
+        const { question, answer, followUpCount = 0, mode = '', modeTitle = '', part = '' } = await request.json();
 
         if (!question || !answer || answer.trim().length < 3) {
             return Response.json({
@@ -28,7 +28,7 @@ export async function POST(request) {
 
         const context = MODE_CONTEXTS[mode] || `${modeTitle || 'speaking'} exercise. Evaluate if the response is relevant and substantive.`;
 
-        const prompt = `You are evaluating a student's spoken response in a ${context}
+        let prompt = `You are evaluating a student's spoken response in a ${context}
 
 Prompt/Scenario: "${question}"
 Student's Response: "${answer}"
@@ -46,6 +46,37 @@ Output ONLY valid JSON, nothing else:
 {"satisfied": true, "followUp": null}
 OR
 {"satisfied": false, "followUp": "Your encouraging follow-up here"}`;
+
+        if (part === 'listening') {
+            prompt = `You are evaluating a student's spoken response to a listening exercise.
+
+Original Audio Transcript: "${question}"
+Student's Response: "${answer}"
+Follow-up attempt number: ${followUpCount}
+
+Criteria for SATISFIED:
+- The student's response accurately reflects the meaning, summary, or exact dictation of the original audio transcript.
+- It is an appropriate and correct response to the listening audio.
+
+If SATISFIED, output {"satisfied": true, "followUp": "Correct!"}
+If NOT satisfied, output an encouraging follow-up (under 20 words) explaining they missed the mark: {"satisfied": false, "followUp": "Not quite! Listen closely and try again."}
+
+Output ONLY valid JSON, nothing else.`;
+        } else if (part === 'reading') {
+            prompt = `You are evaluating a student's read-aloud response.
+
+Text to Read: "${question}"
+Student's Spoken Response: "${answer}"
+Follow-up attempt number: ${followUpCount}
+
+Criteria for SATISFIED:
+- The student's spoken response closely matches the text they were supposed to read. Minor pronunciation errors or one or two missed words are okay, but the core text must be read correctly.
+
+If SATISFIED, output {"satisfied": true, "followUp": "Excellent reading!"}
+If NOT satisfied, output an encouraging follow-up (under 20 words) explaining they missed some words: {"satisfied": false, "followUp": "You missed a few words. Let's try reading it again."}
+
+Output ONLY valid JSON, nothing else.`;
+        }
 
         const responseText = await generateOpenAIContent(prompt, { model: 'gpt-4o-mini' });
         const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();

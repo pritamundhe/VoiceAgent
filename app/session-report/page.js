@@ -9,14 +9,15 @@ export default function SessionReport() {
     const [report, setReport] = useState(null);
 
     useEffect(() => {
-        console.log('[SessionReport] Component mounted.');
         try {
             const data = localStorage.getItem('lastSessionReport');
             if (data) {
-                console.log('[SessionReport] Data found in localStorage.');
-                setReport(JSON.parse(data));
-            } else {
-                console.warn('[SessionReport] No data found in localStorage.');
+                const parsed = JSON.parse(data);
+                setReport(parsed);
+                // Notify Navbar if new badges were earned
+                if (parsed.xpData?.newBadges?.length > 0) {
+                    sessionStorage.setItem('newBadgeEarned', 'true');
+                }
             }
         } catch (err) {
             console.error('[SessionReport] Error reading from localStorage:', err);
@@ -199,22 +200,46 @@ export default function SessionReport() {
                     <aside>
                         <h2 style={{ fontSize: '1.15rem', marginBottom: '1.25rem', fontWeight: 600 }}>Deep Metrics</h2>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                            <div className="glass-panel" style={{ padding: '1rem', minHeight: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-2)' }}>
-                                <span className="stat-label">Unique Words</span>
-                                <span style={{ fontWeight: 600, fontSize: '1.05rem' }}>{metrics.uniqueWords}</span>
-                            </div>
-                            <div className="glass-panel" style={{ padding: '1rem', minHeight: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-2)' }}>
-                                <span className="stat-label">Vocab Richness</span>
-                                <span style={{ fontWeight: 600, fontSize: '1.05rem' }}>{metrics.vocabRichness}</span>
-                            </div>
-                            <div className="glass-panel" style={{ padding: '1rem', minHeight: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-2)' }}>
-                                <span className="stat-label">Repeated Phrases</span>
-                                <span style={{ fontWeight: 600, fontSize: '1.05rem' }}>{metrics.repeatedWordsCount}</span>
-                            </div>
-                            <div className="glass-panel" style={{ padding: '1rem', minHeight: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-2)' }}>
-                                <span className="stat-label">Confidence (AI)</span>
-                                <span style={{ fontWeight: 600, fontSize: '1.05rem', color: aiAnalysis.confidenceScore > 80 ? '#69db7c' : 'inherit' }}>{aiAnalysis.confidenceScore}%</span>
-                            </div>
+                            {[
+                                { label: 'Unique Words',        value: metrics.uniqueWords, unit: '' },
+                                { label: 'Vocab Richness',      value: metrics.vocabRichness, unit: '' },
+                                { label: 'Repeated Phrases',    value: metrics.repeatedWordsCount, unit: '' },
+                                { label: 'Confidence (AI)',     value: `${aiAnalysis.confidenceScore}%`, highlight: aiAnalysis.confidenceScore > 80 },
+                                { label: 'ML Score',            value: `${metrics.overallMlScore ?? '—'}%`, highlight: (metrics.overallMlScore ?? 0) > 75 },
+                                { label: 'Hesitation Score',    value: `${metrics.hesitationScore ?? '—'}%`, highlight: (metrics.hesitationScore ?? 0) > 75 },
+                                { label: 'Coherence Score',     value: `${metrics.coherenceScore ?? '—'}%`, highlight: (metrics.coherenceScore ?? 0) > 75 },
+                                { label: 'Readability (Flesch)',value: `${metrics.readabilityScore ?? '—'}`, unit: '' },
+                            ].map(({ label, value, highlight }) => (
+                                <div key={label} className="glass-panel" style={{ padding: '1rem', minHeight: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-2)' }}>
+                                    <span className="stat-label">{label}</span>
+                                    <span style={{ fontWeight: 600, fontSize: '1.05rem', color: highlight ? '#69db7c' : 'inherit' }}>{value}</span>
+                                </div>
+                            ))}
+                            {metrics.tfidfTopKeywords?.length > 0 && (
+                                <div className="glass-panel" style={{ padding: '1rem', minHeight: 'auto', background: 'var(--surface-2)' }}>
+                                    <span className="stat-label" style={{ display: 'block', marginBottom: '0.5rem' }}>Top Keywords (TF-IDF)</span>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                                        {metrics.tfidfTopKeywords.map(k => (
+                                            <span key={k} style={{ background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)', color: '#93c5fd', padding: '0.2rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600 }}>{k}</span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            {report.xpData && (
+                                <div className="glass-panel" style={{ padding: '1rem', minHeight: 'auto', background: 'rgba(168,85,247,0.07)', border: '1px solid rgba(168,85,247,0.2)' }}>
+                                    <span className="stat-label" style={{ color: '#a855f7', display: 'block', marginBottom: '0.4rem' }}>XP Earned</span>
+                                    <span style={{ fontWeight: 800, fontSize: '1.4rem', color: '#c084fc' }}>+{report.xpData.xpGained}</span>
+                                    <span style={{ fontSize: '0.8rem', color: '#64748b', marginLeft: '0.5rem' }}>Rank: {report.xpData.rank}</span>
+                                    {report.xpData.newBadges?.length > 0 && (
+                                        <div style={{ marginTop: '0.75rem', borderTop: '1px solid rgba(168,85,247,0.15)', paddingTop: '0.75rem' }}>
+                                            <span style={{ fontSize: '0.7rem', color: '#a855f7', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>New Badge{report.xpData.newBadges.length > 1 ? 's' : ''} Unlocked</span>
+                                            {report.xpData.newBadges.map(b => (
+                                                <div key={b.id} style={{ fontSize: '0.85rem', color: '#f1f5f9', fontWeight: 600, marginTop: '0.3rem' }}>{b.name}</div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                         
                         <div style={{ marginTop: '2rem' }}>

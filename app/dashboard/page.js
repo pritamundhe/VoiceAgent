@@ -185,7 +185,8 @@ function DashboardContent() {
                         answer: evalText,
                         followUpCount,
                         mode,
-                        modeTitle: selectedMode?.title || customTitle || ''
+                        modeTitle: selectedMode?.title || customTitle || '',
+                        part
                     })
                 });
                 const data = await res.json();
@@ -328,6 +329,36 @@ function DashboardContent() {
         finally { setIsGeneratingPrompt(false); }
     };
 
+    const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+    const audioRef = useRef(null);
+
+    const playPromptAudio = async () => {
+        const textToPlay = typeof currentPrompt === 'object' ? currentPrompt.q : currentPrompt;
+        if (!textToPlay || isPlayingAudio) return;
+        setIsPlayingAudio(true);
+        try {
+            const res = await fetch('/api/tts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: textToPlay })
+            });
+            if (!res.ok) throw new Error('Failed to fetch audio');
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            if (audioRef.current) {
+                audioRef.current.pause();
+            }
+            const audio = new Audio(url);
+            audioRef.current = audio;
+            audio.onended = () => setIsPlayingAudio(false);
+            audio.onerror = () => setIsPlayingAudio(false);
+            audio.play();
+        } catch (err) {
+            console.error(err);
+            setIsPlayingAudio(false);
+        }
+    };
+
     // Short/fitb auto-stop
     useEffect(() => {
         if ((taskType === 'short' || taskType?.includes('fitb')) && isRecording && (transcript.trim() || currentTurn.trim())) {
@@ -449,8 +480,31 @@ function DashboardContent() {
                                 {isGeneratingPrompt ? (
                                     <div className="generating-shimmer">AI is preparing your practice questions...</div>
                                 ) : (
-                                    <div className="prompt-text-large">
-                                        {promptText || ''}
+                                    <div className="prompt-text-large" style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                                        <span>{part === 'listening' ? 'Listen to the audio and provide your response.' : (promptText || '')}</span>
+                                        {part === 'listening' && (
+                                            <button 
+                                                onClick={playPromptAudio}
+                                                disabled={isPlayingAudio}
+                                                style={{
+                                                    background: '#3b82f6',
+                                                    color: '#ffffff',
+                                                    border: 'none',
+                                                    padding: '0.4rem 1rem',
+                                                    borderRadius: '8px',
+                                                    cursor: isPlayingAudio ? 'not-allowed' : 'pointer',
+                                                    fontSize: '0.9rem',
+                                                    fontWeight: 'bold',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.5rem',
+                                                    opacity: isPlayingAudio ? 0.7 : 1,
+                                                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                                }}
+                                            >
+                                                {isPlayingAudio ? 'Playing...' : '▶ Play Audio'}
+                                            </button>
+                                        )}
                                     </div>
                                 )}
                                 
@@ -470,7 +524,7 @@ function DashboardContent() {
                             
                             <div className="prompt-controls-row">
                                 <span className="mode-pill-tag">
-                                    {customTitle || selectedMode?.title || 'Exercise'}
+                                    {part === 'listening' ? 'Listening Task' : (customTitle || selectedMode?.title || 'Exercise')}
                                 </span>
                                 
                                 {hasQueueMode && promptQueue.length > 0 && (

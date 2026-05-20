@@ -71,9 +71,9 @@ function ModuleCard({ mission, unlocked, isPassed, onStart, activeTab }) {
   const task = getTask(mission.part, mission.taskType);
 
   const palette = {
-      speaking:  { bg: 'rgba(34, 197, 94, 0.15)',  text: '#22c55e', label: 'Low', realLabel:'Speaking' },
-      reading:   { bg: 'rgba(239, 68, 68, 0.12)',  text: '#ef4444', label: 'High', realLabel:'Reading' },
-      listening: { bg: 'rgba(168, 85, 247, 0.15)', text: '#a855f7', label: 'Medium', realLabel:'Listening' }
+      speaking:  { bg: 'rgba(239, 68, 68, 0.12)',  text: '#ef4444', label: 'High', realLabel:'Speaking' },
+      reading:   { bg: 'rgba(168, 85, 247, 0.15)', text: '#a855f7', label: 'Medium', realLabel:'Reading' },
+      listening: { bg: 'rgba(34, 197, 94, 0.15)',  text: '#22c55e', label: 'Low', realLabel:'Listening' }
   };
   const theme = palette[mission.part] || palette.speaking;
 
@@ -213,9 +213,9 @@ function ModuleCard({ mission, unlocked, isPassed, onStart, activeTab }) {
 // ════════════════════════════════════════════════
 function PartCard({ config, active, onClick }) {
   const palette = {
-      speaking:  { bg: 'rgba(34, 197, 94, 0.15)',  text: '#22c55e', realLabel: 'Part I' },
-      reading:   { bg: 'rgba(239, 68, 68, 0.12)',  text: '#ef4444', realLabel: 'Part II' },
-      listening: { bg: 'rgba(168, 85, 247, 0.15)', text: '#a855f7', realLabel: 'Part III' }
+      speaking:  { bg: 'rgba(239, 68, 68, 0.12)',  text: '#ef4444', realLabel: 'Part I' },
+      reading:   { bg: 'rgba(168, 85, 247, 0.15)', text: '#a855f7', realLabel: 'Part II' },
+      listening: { bg: 'rgba(34, 197, 94, 0.15)',  text: '#22c55e', realLabel: 'Part III' }
   };
   const theme = palette[config.label.toLowerCase()] || palette.speaking;
 
@@ -296,9 +296,9 @@ export default function LearningPathPage() {
 
   const TABS = [
     { id: 'all', label: 'All Parts', icon: 'Layers' },
-    { id: 'speaking', label: 'Speaking', icon: 'Mic' },
-    { id: 'reading', label: 'Reading', icon: 'BookOpen' },
     { id: 'listening', label: 'Listening', icon: 'AudioLines' },
+    { id: 'reading', label: 'Reading', icon: 'BookOpen' },
+    { id: 'speaking', label: 'Speaking', icon: 'Mic' },
   ];
 
   // Count modules per section for active filter stats
@@ -357,11 +357,8 @@ export default function LearningPathPage() {
               background: 'linear-gradient(135deg, var(--primary) 0%, var(--accent-purple) 100%)',
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
             }}>
-              Certification Roadmap
+              Learning Path
             </h1>
-            <p style={{ fontSize: '1rem', color: 'var(--text-muted)', margin: '0.3rem 0 0' }}>
-              TOEFL · IELTS · PTE — 3 exam sections · {counts.all} total modules
-            </p>
           </div>
 
           {/* XP Widget */}
@@ -415,7 +412,7 @@ export default function LearningPathPage() {
 
         {/* ── Part Cards (3-col grid) ───────────────── */}
         <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap', padding: '0 1rem' }}>
-          {[SPEAKING_TASKS, READING_TASKS, LISTENING_TASKS].map(cfg => (
+          {[LISTENING_TASKS, READING_TASKS, SPEAKING_TASKS].map(cfg => (
             <PartCard
               key={cfg.label}
               config={cfg}
