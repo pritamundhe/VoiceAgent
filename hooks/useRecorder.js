@@ -416,6 +416,15 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
         cleanup();
     }, [cleanup]);
 
+    const fallbackTTS = useCallback((text) => {
+        if ('speechSynthesis' in window) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 1.0;
+            utterance.pitch = 1.0;
+            window.speechSynthesis.speak(utterance);
+        }
+    }, []);
+
     const fetchAiFeedback = useCallback(async (recordedTranscript, currentMode = '', currentPrompt = '') => {
         if (!recordedTranscript || recordedTranscript.trim().length === 0) return;
         setIsAnalyzingAI(true);
@@ -435,10 +444,16 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
                 if (data.audioBase64) {
                     try {
                         const snd = new Audio(`data:audio/mp3;base64,${data.audioBase64}`);
-                        snd.play().catch(e => console.error('Audio playback blocked / failed:', e));
+                        snd.play().catch(e => {
+                            console.error('Audio playback blocked / failed:', e);
+                            fallbackTTS(data.response);
+                        });
                     } catch (ae) {
                         console.error('Failed to create audio object:', ae);
+                        fallbackTTS(data.response);
                     }
+                } else {
+                    fallbackTTS(data.response);
                 }
             } else {
                 setChatHistory(prev => [...prev, { role: 'ai', content: 'Failed to get feedback.' }]);
@@ -450,6 +465,24 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
             setIsAnalyzingAI(false);
         }
     }, []);
+
+    const addAiMessage = useCallback((text, audioBase64) => {
+        setChatHistory(prev => [...prev, { role: 'ai', content: text }]);
+        if (audioBase64) {
+            try {
+                const snd = new Audio(`data:audio/mp3;base64,${audioBase64}`);
+                snd.play().catch(e => {
+                    console.error('Audio playback blocked / failed:', e);
+                    fallbackTTS(text);
+                });
+            } catch (ae) {
+                console.error('Failed to create audio object:', ae);
+                fallbackTTS(text);
+            }
+        } else {
+            fallbackTTS(text);
+        }
+    }, [fallbackTTS]);
 
     // 6-second Pause Trigger
     useEffect(() => {
@@ -495,6 +528,7 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
         isAnalyzingAI,
         startRecording,
         stopRecording,
-        fetchAiFeedback
+        fetchAiFeedback,
+        addAiMessage
     };
 }

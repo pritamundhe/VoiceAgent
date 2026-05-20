@@ -9,7 +9,8 @@ export async function POST(request) {
         }
 
         let prompt = `You are a creative prompt generator for a speech practice application.
-Produce exactly ONE creative, thought-provoking scenario prompt for the practice mode: "${modeTitle}" (${description}).
+Produce exactly ONE creative, simple, and relatable scenario prompt for the practice mode: "${modeTitle}" (${description}).
+IMPORTANT: The topic MUST be very common and easy to understand for everyone (e.g., daily life, common experiences, basic opinions). Avoid hard, niche, or overly technical topics.
 The prompt MUST BE EXTREMELY SHORT (under 12 words) and direct. Do not include any additional commentary, quotation marks, or prefixes. Make it specific and unique every time.`;
 
         if (taskType === 'repeat') {

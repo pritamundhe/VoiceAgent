@@ -6,6 +6,8 @@ import useRecorder from '../../hooks/useRecorder';
 import PaceChart from '../../components/PaceChart';
 import SpeechAnalysisPanel from '../../components/SpeechAnalysisPanel';
 import LiveMonitor from '../../components/LiveMonitor';
+import GhostTextOverlay from '../../components/GhostTextOverlay';
+import useAutocomplete from '../../hooks/useAutocomplete';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { MODES } from '../../lib/modes';
@@ -57,12 +59,42 @@ function DashboardContent() {
         liveAnalysis,
         startRecording,
         stopRecording: baseStopRecording,
-        fetchAiFeedback
+        fetchAiFeedback,
+        addAiMessage
     } = useRecorder(mode, currentPrompt, taskType);
+
+    // ── Groq AI Autocomplete ──────────────────────────────────────────────────
+    const { ghostText, isLoading: acIsLoading, acceptSuggestion, dismissSuggestion } = useAutocomplete(
+        isRecording,
+        transcript,
+        currentTurn
+    );
 
     const stopRecording = useCallback(() => {
         baseStopRecording();
     }, [baseStopRecording]);
+
+    const [hasStartedOpener, setHasStartedOpener] = useState(false);
+
+    const handleStartPractice = () => {
+        startRecording();
+        if (!hasStartedOpener && taskType !== 'repeat' && taskType !== 'short' && !taskType?.includes('fitb')) {
+            setHasStartedOpener(true);
+            fetch('/api/chat-opener', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    mode: selectedMode?.id || mode, 
+                    prompt: currentPrompt, 
+                    modeTitle: customTitle || selectedMode?.title 
+                })
+            }).then(res => res.json()).then(openerData => {
+                if (openerData.opener) {
+                    addAiMessage(openerData.opener, openerData.audioBase64);
+                }
+            }).catch(console.error);
+        }
+    };
 
     const handleStopRecording = () => {
         stopRecording();
@@ -146,6 +178,7 @@ function DashboardContent() {
         setCurrentPrompt('');
         setHasPlayedTTS(false);
         setShowPromptText(false);
+        setHasStartedOpener(false); // Reset opener flag for the new prompt
         try {
             const res = await fetch('/api/generate-prompt', {
                 method: 'POST',
@@ -160,14 +193,15 @@ function DashboardContent() {
             });
             const data = await res.json();
             if (data.prompt) {
+                const thePrompt = Array.isArray(data.prompt) ? data.prompt[0] : data.prompt;
                 if (Array.isArray(data.prompt)) {
                     setPromptQueue(data.prompt);
                     setCurrentPromptIndex(0);
-                    setCurrentPrompt(data.prompt[0]);
+                    setCurrentPrompt(thePrompt);
                 } else {
                     setPromptQueue([]);
                     setCurrentPromptIndex(0);
-                    setCurrentPrompt(data.prompt);
+                    setCurrentPrompt(thePrompt);
                 }
             }
         } catch (err) {
@@ -290,7 +324,7 @@ function DashboardContent() {
                                 </button>
 
                                 {!isRecording ? (
-                                    <button className="btn-primary-small" onClick={startRecording} style={{ borderRadius: '100px' }}>
+                                    <button className="btn-primary-small" onClick={handleStartPractice} style={{ borderRadius: '100px' }}>
                                         <MicIcon isRecording={false} /> <span>Start Practice</span>
                                     </button>
                                 ) : (
@@ -327,7 +361,17 @@ function DashboardContent() {
                     <div className="analytic-card interaction-card" style={{ display: 'flex', flexDirection: 'column' }}>
                         <header className="card-header">
                             <span className="card-tag">Live Transcription</span>
-                            <h3>The Conversation</h3>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <h3>The Conversation</h3>
+                                {isRecording && (
+                                    <div className="autocomplete-status">
+                                        <span className={`ac-dot ${acIsLoading ? 'ac-thinking' : ghostText ? 'ac-ready' : 'ac-idle'}`} />
+                                        <span className="ac-label">
+                                            {acIsLoading ? 'AI thinking...' : ghostText ? 'Suggestion ready' : 'AI Autocomplete'}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
                         </header>
                         <div className="transcript-area">
                             {chatHistory.map((m, i) => (
@@ -342,11 +386,23 @@ function DashboardContent() {
                                     <p>
                                         {transcript}
                                         <span className="partial">{currentTurn}</span>
+                                        {/* Ghost text inline after partial */}
+                                        <GhostTextOverlay
+                                            ghostText={ghostText}
+                                            isLoading={acIsLoading}
+                                            isRecording={isRecording}
+                                            onAccept={acceptSuggestion}
+                                            onDismiss={dismissSuggestion}
+                                        />
                                     </p>
                                 </div>
                             )}
                             {!transcript && !currentTurn && chatHistory.length === 0 && (
-                                <div className="empty-chat">Your speech transcription will appear here in real-time.</div>
+                                <div className="empty-chat">
+                                    {isRecording
+                                        ? <span>Listening... <em style={{ color: 'rgba(99,102,241,0.6)', fontStyle: 'italic' }}>AI suggestions appear as you speak</em></span>
+                                        : 'Your speech transcription will appear here in real-time.'}
+                                </div>
                             )}
                         </div>
                     </div>
@@ -469,6 +525,41 @@ function DashboardContent() {
         .msg.user.active p { color: #fff; }
         .partial { opacity: 0.5; color: #8b949e; }
         .empty-chat { height: 100%; display: flex; align-items: center; justify-content: center; text-align: center; opacity: 0.3; font-style: italic; }
+
+        /* ── Autocomplete Status Badge ── */
+        .autocomplete-status {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            background: rgba(99, 102, 241, 0.08);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: 100px;
+            padding: 0.3rem 0.8rem;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            color: rgba(99,102,241,0.85);
+        }
+        .ac-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #30363d;
+            transition: background 0.3s, box-shadow 0.3s;
+        }
+        .ac-dot.ac-idle { background: #30363d; }
+        .ac-dot.ac-thinking {
+            background: #a78bfa;
+            animation: acThink 0.6s ease-in-out infinite alternate;
+        }
+        .ac-dot.ac-ready {
+            background: #6366f1;
+            box-shadow: 0 0 8px rgba(99,102,241,0.7);
+            animation: acPulse 1.5s ease-in-out infinite;
+        }
+        .ac-label { text-transform: uppercase; }
+        @keyframes acThink { from { opacity: 0.4; } to { opacity: 1; } }
+        @keyframes acPulse { 0%,100% { opacity: 0.8; } 50% { opacity: 1; box-shadow: 0 0 12px rgba(99,102,241,0.9); } }
 
         .live-metrics-compact { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
         .l-metric { background: #161b22; padding: 1rem; border-radius: 16px; border: 1px solid #30363d; }
