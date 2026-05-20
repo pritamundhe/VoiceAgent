@@ -16,12 +16,12 @@ The prompt MUST BE EXTREMELY SHORT (under 12 words) and direct. Do not include a
         if (generateQueue) {
             prompt = `You are a professional conversational coach and English tutor.
 For the practice mode: "${modeTitle}" (${description}), choose ONE specific, simple, clear, and relatable topic (e.g., "A memorable vacation", "Dealing with a busy workday", "Pitching a food delivery app").
-Then, generate exactly 5 simple, clear, direct, and conversational questions that are all strictly relevant to that chosen topic.
+Then, generate exactly 10 simple, clear, direct, and conversational questions that are all strictly relevant to that chosen topic.
 
 Requirements:
 1. Every question must be extremely simple and easy for a beginner/intermediate student to understand and answer.
 2. Every question must directly relate to the chosen topic.
-3. The questions should progress naturally (e.g., introducing the topic, describing a scenario, sharing an opinion).
+3. The questions should progress naturally (e.g., introducing the topic, describing a scenario, sharing an opinion, discussing challenges, reflecting on future ideas).
 4. Keep questions under 15 words each.
 5. Output ONLY a raw JSON object and NOTHING ELSE. Do NOT wrap in markdown code blocks, do NOT write any intro/outro. Just output the raw JSON.
 
@@ -33,7 +33,12 @@ JSON Structure:
     "Question 2",
     "Question 3",
     "Question 4",
-    "Question 5"
+    "Question 5",
+    "Question 6",
+    "Question 7",
+    "Question 8",
+    "Question 9",
+    "Question 10"
   ]
 }`;
         } else if (taskType === 'repeat') {
@@ -86,7 +91,12 @@ OUTPUT ONLY THE PROMPT TEXT. No quotes, no intro, under 15 words. Make it differ
                             "How do you usually practice or learn new things?",
                             "What is a big goal you want to achieve this year?",
                             "Can you describe one challenge you overcame recently?",
-                            "What is the best piece of advice you've ever received?"
+                            "What is the best piece of advice you've ever received?",
+                            "How do you stay motivated during tough times?",
+                            "What does success look like to you?",
+                            "Tell me about a skill you would like to master.",
+                            "How do you balance work or school with your personal life?",
+                            "What is the most important lesson you learned this week?"
                         ]
                       }
                     : ["The quick brown fox jumps over the lazy dog.", "I like to drink coffee in the morning.", "Where is the nearest train station?", "She bought a new pair of shoes.", "It is raining heavily today."];

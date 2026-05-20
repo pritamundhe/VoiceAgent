@@ -450,7 +450,7 @@ function DashboardContent() {
                                     <div className="generating-shimmer">AI is preparing your practice questions...</div>
                                 ) : (
                                     <div className="prompt-text-large">
-                                        {promptText ? `"${promptText}"` : ''}
+                                        {promptText || ''}
                                     </div>
                                 )}
                                 
