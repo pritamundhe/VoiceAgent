@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 const SAMPLE_RATE = 16000;
 const FILLER_WORDS = ['um', 'uh', 'like', 'actually', 'basically'];
 
-export default function useRecorder(mode = '', prompt = '', taskType = '') {
+export default function useRecorder(mode = '', prompt = '', taskType = '', hasQueue = false) {
     const [isRecording, setIsRecording] = useState(false);
     const [status, setStatus] = useState('Ready to record');
     const [transcript, setTranscript] = useState('');
@@ -40,13 +40,18 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
         clarity: 100,
         liveWpm: 0,
         confidence: 100,
-        sentiment: 0,  // DistilBERT Sentiment
-        emotion: 'neu' // SpeechBrain Emotion
+        sentiment: 0,
+        emotion: 'neu'
     });
 
     // AI Feedback & Chat History State
-    const [chatHistory, setChatHistory] = useState([]); // { role: 'user' | 'ai', content: '' }
+    const [chatHistory, setChatHistory] = useState([]);
     const [isAnalyzingAI, setIsAnalyzingAI] = useState(false);
+
+    // Expose a way for external components (e.g., interview mode) to push messages
+    const addChatMessage = useCallback((role, content) => {
+        setChatHistory(prev => [...prev, { role, content }]);
+    }, []);
     
     // Live Ref for periodic analysis
     const lastSentimentTextRef = useRef('');
@@ -145,7 +150,6 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
         const words = text.trim().split(/\s+/).filter(w => w.length > 0);
         setTotalWords(prev => prev + words.length);
         
-        // Track timestamps for LiveWPM
         const now = Date.now();
         const newTimestamps = words.map(() => now);
         wordTimestampsRef.current = [...wordTimestampsRef.current, ...newTimestamps];
@@ -154,7 +158,6 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
     useEffect(() => {
         if (duration > 0 && duration % 2 === 0) {
             setPaceHistory(prev => {
-                // If the last label was the same second, don't add again
                 const label = `${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')}`;
                 if (prev.labels[prev.labels.length - 1] === label) return prev;
                 
@@ -166,15 +169,13 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
                 };
             });
         }
-    }, [duration]); // Only depend on duration
+    }, [duration]);
 
     useEffect(() => {
-        // Send to distilbert every 3 seconds if transcript changed
         const interval = setInterval(async () => {
              const currentText = (transcript + ' ' + currentTurn).trim();
              if (currentText && currentText.length > 10 && currentText !== lastSentimentTextRef.current) {
                  lastSentimentTextRef.current = currentText;
-                 // Get last 20 words so we aren't analyzing a massive paragraph
                  const chunk = currentText.split(' ').slice(-20).join(' ');
                  try {
                      const res = await fetch('/api/analyze-sentiment', {
@@ -185,7 +186,6 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
                      if (res.ok) {
                          const data = await res.json();
                          if (data.sentiment) {
-                             // "POSITIVE" or "NEGATIVE", mapping to a score 0-100
                              const isPositive = data.sentiment.label === 'POSITIVE';
                              const scoreVal = Math.round(data.sentiment.score * 100);
                              setLiveAnalysis(prev => ({
@@ -202,9 +202,7 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
     }, [transcript, currentTurn]);
 
     useEffect(() => {
-        // Update live analysis slow metrics
         setLiveAnalysis(prev => {
-            // Stability: based on paceHistory variance
             let stability = 100;
             if (paceHistory.data.length > 2) {
                 const mean = paceHistory.data.reduce((a, b) => a + b, 0) / paceHistory.data.length;
@@ -212,11 +210,9 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
                 stability = Math.max(0, 100 - (Math.sqrt(variance) / 2));
             }
 
-            // Clarity: based on filler ratio
             const fillerRatio = totalWords > 0 ? (totalFillers / totalWords) : 0;
             const clarity = Math.max(0, 100 - (fillerRatio * 500));
 
-            // Live WPM: Rate over last 5 seconds
             const now = Date.now();
             wordTimestampsRef.current = wordTimestampsRef.current.filter(ts => now - ts < 5000);
             const liveWpm = Math.round((wordTimestampsRef.current.length / 5) * 60);
@@ -229,15 +225,10 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
                 confidence: Math.round((stability + clarity + prev.energy + prev.pauseQuality) / 4)
             };
         });
-    }, [totalWords, totalFillers, paceHistory.data]); // No wpm or liveAnalysis in deps
+    }, [totalWords, totalFillers, paceHistory.data]);
 
     const startRecording = useCallback(async () => {
         try {
-            // DO NOT reset session states here—allow resuming!
-            // E.g. we want to keep totalWords, duration, chatHistory, etc.
-            
-            // We just reset transcript and currentTurn so AssemblyAI starts a fresh block 
-            // of text for this specific recording burst, but we leave the chatHistory alone
             setTranscript('');
             setCurrentTurn('');
             committedTurnsRef.current = [];
@@ -264,7 +255,6 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
                         audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
                         const source = audioContextRef.current.createMediaStreamSource(mediaStreamRef.current);
                         
-                        // Add Analyser
                         analyserRef.current = audioContextRef.current.createAnalyser();
                         analyserRef.current.fftSize = 256;
                         source.connect(analyserRef.current);
@@ -276,7 +266,6 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
                         scriptProcessorRef.current.onaudioprocess = (event) => {
                             if (!proxyReadyRef.current || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
                             
-                            // Real-time Energy/Volume Calculation
                             if (analyserRef.current) {
                                 analyserRef.current.getByteTimeDomainData(dataArray);
                                 let sum = 0;
@@ -287,7 +276,6 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
                                 const rms = Math.sqrt(sum / bufferLength);
                                 const energy = Math.min(100, Math.round(rms * 500));
                                 
-                                // Pause Quality Detection
                                 const now = Date.now();
                                 if (energy > 10) {
                                     lastAudioTimeRef.current = now;
@@ -318,7 +306,6 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
                         setStatus('Recording...');
                         startTimeRef.current = Date.now();
                         
-                        // Setup MediaRecorder for SpeechBrain Audio analysis
                         try {
                             mediaRecorderRef.current = new MediaRecorder(mediaStreamRef.current);
                             mediaRecorderRef.current.ondataavailable = async (e) => {
@@ -343,12 +330,11 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
                                     };
                                 }
                             };
-                            mediaRecorderRef.current.start(4000); // 4 seconds chunk
+                            mediaRecorderRef.current.start(4000);
                         } catch (e) {
                             console.warn('MediaRecorder for SpeechBrain failed to start on this browser.', e);
                         }
 
-                        // Capture the current duration so we can add to it instead of overwriting
                         const initialDuration = duration;
                         
                         durationIntervalRef.current = setInterval(() => {
@@ -373,7 +359,6 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
                                 const cleanPrev = prevText.toLowerCase().replace(/[^\w\s]/g, '');
                                 const checkPrefix = cleanPrev.substring(0, 12);
                                 
-                                // If the incoming text shrinks dramatically, or completely changes, it's a new thought/turn.
                                 if (trimmedText.length < prevText.length - 15) {
                                     isNewTurn = true;
                                 } else if (checkPrefix.length > 3 && !cleanTrimmed.includes(checkPrefix)) {
@@ -464,7 +449,7 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
         } finally {
             setIsAnalyzingAI(false);
         }
-    }, []);
+    }, [fallbackTTS]);
 
     const addAiMessage = useCallback((text, audioBase64) => {
         setChatHistory(prev => [...prev, { role: 'ai', content: text }]);
@@ -485,10 +470,12 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
     }, [fallbackTTS]);
 
     // 6-second Pause Trigger
+    // Interview mode manages its own evaluation on recording stop — skip the pause trigger for it
     useEffect(() => {
         if (!isRecording || !transcript.trim()) return;
         const isTaskMode = taskType === 'repeat' || taskType === 'short' || taskType?.includes('fitb');
-        if (isTaskMode) return; 
+        if (isTaskMode) return;
+        if (hasQueue) return; // All queue modes handle evaluation on recording stop
 
         if (pauseTimeoutRef.current) clearTimeout(pauseTimeoutRef.current);
         
@@ -529,6 +516,7 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
         startRecording,
         stopRecording,
         fetchAiFeedback,
-        addAiMessage
+        addAiMessage,
+        addChatMessage
     };
 }

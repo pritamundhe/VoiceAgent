@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 
-export default function SearchPage() {
+function SearchContent() {
     const searchParams = useSearchParams();
     const query = searchParams.get('q');
     const [users, setUsers] = useState([]);
@@ -196,5 +196,13 @@ export default function SearchPage() {
                 }
             `}</style>
         </div>
+    );
+}
+
+export default function SearchPage() {
+    return (
+        <Suspense fallback={<div style={{ minHeight: '100vh', background: 'var(--bg)', padding: '6rem 2rem' }}>Loading search...</div>}>
+            <SearchContent />
+        </Suspense>
     );
 }
