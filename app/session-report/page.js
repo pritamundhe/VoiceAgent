@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { FILLER_WORDS } from '../../lib/analytics';
 
 export default function SessionReport() {
-    const [report, setReport] = useState(null);
+    const [report,           setReport]           = useState(null);
+    const [moduleCompletion, setModuleCompletion] = useState(null); // result from /api/learning-path/complete
 
     useEffect(() => {
         console.log('[SessionReport] Component mounted.');
@@ -14,7 +15,43 @@ export default function SessionReport() {
             const data = localStorage.getItem('lastSessionReport');
             if (data) {
                 console.log('[SessionReport] Data found in localStorage.');
-                setReport(JSON.parse(data));
+                const parsed = JSON.parse(data);
+                setReport(parsed);
+
+                // ── Call /api/learning-path/complete if a module was pending ──
+                const pendingRaw = sessionStorage.getItem('pendingModule');
+                if (pendingRaw) {
+                    try {
+                        const pending = JSON.parse(pendingRaw);
+                        sessionStorage.removeItem('pendingModule'); // consume immediately
+                        sessionStorage.removeItem('moduleContent');
+
+                        // Use AI confidenceScore as the normalised score (0-100)
+                        const score = parsed.aiAnalysis?.confidenceScore ?? parsed.metrics?.fluencyScore ?? 50;
+
+                        fetch('/api/learning-path/complete', {
+                            method:  'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                moduleId:   pending.moduleId,
+                                levelId:    pending.levelId,
+                                taskType:   pending.taskType,
+                                part:       pending.part,
+                                topic:      pending.topic,
+                                transcript: parsed.transcript,
+                                score,
+                                metrics:    parsed.metrics,
+                            }),
+                        })
+                        .then(r => r.json())
+                        .then(result => {
+                            if (!result.error) setModuleCompletion(result);
+                        })
+                        .catch(err => console.error('[SessionReport] Module complete error:', err));
+                    } catch (e) {
+                        console.error('[SessionReport] Failed to parse pendingModule:', e);
+                    }
+                }
             } else {
                 console.warn('[SessionReport] No data found in localStorage.');
             }
@@ -119,8 +156,60 @@ export default function SessionReport() {
     return (
         <div className="app-container" style={{ overflowY: 'auto' }}>
             <Navbar />
+
+            {/* ── Module completion result banner ── */}
+            {moduleCompletion && (
+                <div style={{
+                    margin: '1.25rem auto 0', maxWidth: '1400px', padding: '0 2rem',
+                    animation: 'fadeUp 0.5s ease',
+                }}>
+                    <div style={{
+                        background: moduleCompletion.passed
+                            ? 'linear-gradient(135deg, rgba(34,197,94,0.12), rgba(6,182,212,0.08))'
+                            : 'linear-gradient(135deg, rgba(239,68,68,0.10), rgba(239,68,68,0.05))',
+                        border: `1px solid ${moduleCompletion.passed ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.3)'}`,
+                        borderRadius: '18px', padding: '1.25rem 1.5rem',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        flexWrap: 'wrap', gap: '1rem',
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <span style={{ fontSize: '2rem' }}>{moduleCompletion.passed ? '🏆' : '💪'}</span>
+                            <div>
+                                <div style={{ fontSize: '1rem', fontWeight: 800, color: moduleCompletion.passed ? '#22c55e' : '#ef4444' }}>
+                                    {moduleCompletion.passed ? 'Module Passed!' : 'Keep Practicing!'}
+                                </div>
+                                <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)', marginTop: '0.15rem' }}>
+                                    {moduleCompletion.feedbackMessage}
+                                </div>
+                                {moduleCompletion.newlyUnlockedModules?.length > 0 && (
+                                    <div style={{ fontSize: '0.78rem', color: '#06b6d4', marginTop: '0.35rem', fontWeight: 600 }}>
+                                        🔓 Unlocked: {moduleCompletion.newlyUnlockedModules.join(', ')}
+                                    </div>
+                                )}
+                                {moduleCompletion.rankUp && (
+                                    <div style={{ fontSize: '0.85rem', color: '#facc15', marginTop: '0.35rem', fontWeight: 700 }}>
+                                        ⭐ Rank Up! {moduleCompletion.rankUp.from} → {moduleCompletion.rankUp.to}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <div style={{
+                                background: 'rgba(250,204,21,0.12)', border: '1px solid rgba(250,204,21,0.25)',
+                                borderRadius: '12px', padding: '0.6rem 1rem', textAlign: 'center',
+                            }}>
+                                <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#facc15', lineHeight: 1 }}>
+                                    +{moduleCompletion.xpAwarded}
+                                </div>
+                                <div style={{ fontSize: '0.68rem', color: 'rgba(250,204,21,0.7)', fontWeight: 700, letterSpacing: '0.05em', marginTop: '0.2rem' }}>XP</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            <style>{`@keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }`}</style>
             
-            <main style={{ maxWidth: '1400px', margin: '2rem auto', padding: '0 2rem', paddingBottom: '4rem' }}>
+            <main style={{ maxWidth: '1400px', margin: '1.5rem auto', padding: '0 2rem', paddingBottom: '4rem' }}>
                 <div style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)', borderRadius: '20px', padding: '2.5rem', border: '1px solid rgba(255,255,255,0.05)', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
                     <header style={{ marginBottom: '2.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1.5rem' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1rem' }}>

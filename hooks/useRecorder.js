@@ -416,6 +416,13 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
         cleanup();
     }, [cleanup]);
 
+    const clearTranscript = useCallback(() => {
+        setTranscript('');
+        setCurrentTurn('');
+        committedTurnsRef.current = [];
+        lastTurnTextRef.current = '';
+    }, []);
+
     const fallbackTTS = useCallback((text) => {
         if ('speechSynthesis' in window) {
             const utterance = new SpeechSynthesisUtterance(text);
@@ -528,6 +535,7 @@ export default function useRecorder(mode = '', prompt = '', taskType = '') {
         isAnalyzingAI,
         startRecording,
         stopRecording,
+        clearTranscript,
         fetchAiFeedback,
         addAiMessage
     };

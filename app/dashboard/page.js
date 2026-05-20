@@ -1,13 +1,11 @@
 'use client';
 
-import { useState, useEffect, Suspense, useCallback } from 'react';
+import { useState, useEffect, Suspense, useCallback, useRef } from 'react';
 import Navbar from '../../components/Navbar';
 import useRecorder from '../../hooks/useRecorder';
 import PaceChart from '../../components/PaceChart';
 import SpeechAnalysisPanel from '../../components/SpeechAnalysisPanel';
 import LiveMonitor from '../../components/LiveMonitor';
-import GhostTextOverlay from '../../components/GhostTextOverlay';
-import useAutocomplete from '../../hooks/useAutocomplete';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { MODES } from '../../lib/modes';
@@ -59,16 +57,10 @@ function DashboardContent() {
         liveAnalysis,
         startRecording,
         stopRecording: baseStopRecording,
+        clearTranscript,
         fetchAiFeedback,
         addAiMessage
     } = useRecorder(mode, currentPrompt, taskType);
-
-    // ── Groq AI Autocomplete ──────────────────────────────────────────────────
-    const { ghostText, isLoading: acIsLoading, acceptSuggestion, dismissSuggestion } = useAutocomplete(
-        isRecording,
-        transcript,
-        currentTurn
-    );
 
     const stopRecording = useCallback(() => {
         baseStopRecording();
@@ -218,41 +210,58 @@ function DashboardContent() {
         }
     }, [selectedMode, customTitle]);
 
-    useEffect(() => {
-        if ((taskType === 'short' || taskType?.includes('fitb')) && isRecording && (transcript.trim() || currentTurn.trim())) {
-            const timer = setTimeout(() => { stopRecording(); }, 1500);
-            return () => clearTimeout(timer);
-        }
-    }, [transcript, currentTurn, isRecording, taskType, stopRecording]);
+    const isVerifyingRef = useRef(false);
+    const lastVerifiedTranscriptRef = useRef('');
 
     useEffect(() => {
+        const fullSpoken = (transcript + ' ' + (currentTurn || '')).trim();
+        if (!fullSpoken || !currentPrompt || (taskType !== 'short' && !taskType?.includes('fitb'))) return;
+        if (verificationResult?.correct) return;
+
+        const expectedAnswer = currentPrompt.a?.toLowerCase().replace(/[^\w\s]/g, '');
+        const spokenClean = fullSpoken.toLowerCase().replace(/[^\w\s]/g, '');
+
+        // 1. Instant Local Match
+        if (expectedAnswer && spokenClean.includes(expectedAnswer)) {
+            setVerificationResult({ correct: true, feedback: 'Match Detected!' });
+            return;
+        }
+
+        // 2. AI Semantic Match (Debounced)
         const handleVerify = async () => {
-            const fullSpoken = (transcript + ' ' + (currentTurn || '')).trim();
-            if (!isRecording && (taskType === 'short' || taskType?.includes('fitb')) && fullSpoken && currentPrompt && !isVerifying) {
-                setIsVerifying(true);
-                try {
-                    const res = await fetch('/api/verify-answer', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            question: currentPrompt.q,
-                            spoken: fullSpoken,
-                            expected: currentPrompt.a
-                        })
-                    });
-                    const data = await res.json();
-                    setVerificationResult(data);
-                } catch (e) {
-                    console.error(e);
-                } finally {
-                    setIsVerifying(false);
-                }
+            if (isVerifyingRef.current || fullSpoken === lastVerifiedTranscriptRef.current) return;
+            if (spokenClean.split(/\s+/).length < 1) return;
+
+            isVerifyingRef.current = true;
+            lastVerifiedTranscriptRef.current = fullSpoken;
+            
+            try {
+                const res = await fetch('/api/verify-answer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        question: currentPrompt.q,
+                        spoken: fullSpoken,
+                        expected: currentPrompt.a
+                    })
+                });
+                const data = await res.json();
+                setVerificationResult(data);
+            } catch (e) {
+                console.error(e);
+            } finally {
+                isVerifyingRef.current = false;
             }
         };
-        if (!isRecording) handleVerify();
-    }, [isRecording, transcript, currentTurn, taskType, currentPrompt]);
 
-    const handleNextSentence = () => {
+        const timer = setTimeout(() => {
+            handleVerify();
+        }, 1200);
+
+        return () => clearTimeout(timer);
+    }, [transcript, currentTurn, taskType, currentPrompt, verificationResult]);
+
+    const handleNextSentence = useCallback(() => {
         if ((taskType === 'repeat' || taskType === 'short' || taskType?.includes('fitb')) && currentPrompt) {
             const fullSpoken = transcript + ' ' + (currentTurn || '');
             setRepeatResults(prev => [...prev, {
@@ -265,7 +274,7 @@ function DashboardContent() {
             }]);
         }
         setVerificationResult(null);
-        if (isRecording) stopRecording();
+        clearTranscript();
         const nextIdx = currentPromptIndex + 1;
         if (nextIdx < promptQueue.length) {
             setCurrentPromptIndex(nextIdx);
@@ -275,7 +284,41 @@ function DashboardContent() {
         } else {
             handleEndSession();
         }
-    };
+    }, [taskType, currentPrompt, transcript, currentTurn, verificationResult, isRecording, stopRecording, currentPromptIndex, promptQueue]);
+
+    // ── Unified Auto-advance & Repeat Logic ─────────────────────────────────────
+    useEffect(() => {
+        if (taskType === 'repeat' && currentPrompt && typeof currentPrompt === 'string') {
+            const fullSpoken = (transcript + ' ' + (currentTurn || '')).toLowerCase().replace(/[^\w\s]/g, '').trim();
+            if (fullSpoken) {
+                const spokenWords = fullSpoken.split(/\s+/).filter(Boolean);
+                const targetWords = currentPrompt.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean);
+                if (spokenWords.length > 0 && targetWords.length > 0) {
+                    const matchCount = spokenWords.filter(w => targetWords.includes(w)).length;
+                    const matchRatio = matchCount / targetWords.length;
+                    if (matchRatio >= 0.7) {
+                        if (!verificationResult || !verificationResult.correct) {
+                            setVerificationResult({ correct: true, feedback: 'Match Detected!' });
+                        }
+                    } else if (spokenWords.length >= targetWords.length) {
+                        if (!verificationResult || verificationResult.correct) {
+                            setVerificationResult({ correct: false, feedback: 'Not quite, keep trying! Speak clearly.' });
+                        }
+                    }
+                }
+            }
+        }
+    }, [transcript, currentTurn, currentPrompt, taskType, verificationResult]);
+
+    // Auto-advance if verified correct
+    useEffect(() => {
+        if ((taskType === 'short' || taskType === 'repeat' || taskType?.includes('fitb')) && verificationResult?.correct) {
+            const timer = setTimeout(() => {
+                handleNextSentence();
+            }, 1500);
+            return () => clearTimeout(timer);
+        }
+    }, [verificationResult, taskType, handleNextSentence]);
 
     if (!mode && !customTitle) {
         router.push('/practice');
@@ -333,7 +376,7 @@ function DashboardContent() {
                                     </button>
                                 )}
 
-                                {(transcript || chatHistory.length > 0) && !isRecording && (
+                                {(transcript || chatHistory.length > 0 || repeatResults.length > 0) && !isRecording && (
                                     <button className="btn-finish-small" onClick={handleEndSession} style={{ borderRadius: '100px' }}>
                                         Finish & View Report
                                     </button>
@@ -363,14 +406,6 @@ function DashboardContent() {
                             <span className="card-tag">Live Transcription</span>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <h3>The Conversation</h3>
-                                {isRecording && (
-                                    <div className="autocomplete-status">
-                                        <span className={`ac-dot ${acIsLoading ? 'ac-thinking' : ghostText ? 'ac-ready' : 'ac-idle'}`} />
-                                        <span className="ac-label">
-                                            {acIsLoading ? 'AI thinking...' : ghostText ? 'Suggestion ready' : 'AI Autocomplete'}
-                                        </span>
-                                    </div>
-                                )}
                             </div>
                         </header>
                         <div className="transcript-area">
@@ -386,21 +421,13 @@ function DashboardContent() {
                                     <p>
                                         {transcript}
                                         <span className="partial">{currentTurn}</span>
-                                        {/* Ghost text inline after partial */}
-                                        <GhostTextOverlay
-                                            ghostText={ghostText}
-                                            isLoading={acIsLoading}
-                                            isRecording={isRecording}
-                                            onAccept={acceptSuggestion}
-                                            onDismiss={dismissSuggestion}
-                                        />
                                     </p>
                                 </div>
                             )}
                             {!transcript && !currentTurn && chatHistory.length === 0 && (
                                 <div className="empty-chat">
                                     {isRecording
-                                        ? <span>Listening... <em style={{ color: 'rgba(99,102,241,0.6)', fontStyle: 'italic' }}>AI suggestions appear as you speak</em></span>
+                                        ? <span>Listening...</span>
                                         : 'Your speech transcription will appear here in real-time.'}
                                 </div>
                             )}
@@ -463,7 +490,7 @@ function DashboardContent() {
         .top-section { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
         .prompt-card { min-height: 60px; padding: 1.5rem; }
         
-        .bottom-section { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; }
+        .bottom-section { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; max-height: calc(100vh - 280px); }
 
         .analytic-card {
             background: #0d1117;
@@ -471,6 +498,9 @@ function DashboardContent() {
             border-radius: 28px;
             padding: 2rem;
             box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+        }
             transition: all 0.3s cubic-bezier(0.2, 0, 0, 1);
         }
         .analytic-card:hover { border-color: rgba(68, 147, 248, 0.5); transform: translateY(-2px); }
@@ -515,7 +545,7 @@ function DashboardContent() {
         .mode-display { font-size: 0.75rem; font-weight: 800; color: #8b949e; text-transform: uppercase; background: #161b22; padding: 0.35rem 0.8rem; border-radius: 8px; border: 1px solid #30363d; }
 
 
-        .transcript-area { flex: 1; min-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 1.5rem; padding-right: 1rem; }
+        .transcript-area { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 1.5rem; padding-right: 1rem; }
         .transcript-area::-webkit-scrollbar { width: 4px; }
         .transcript-area::-webkit-scrollbar-thumb { background: #30363d; border-radius: 10px; }
 
@@ -562,6 +592,9 @@ function DashboardContent() {
         @keyframes acPulse { 0%,100% { opacity: 0.8; } 50% { opacity: 1; box-shadow: 0 0 12px rgba(99,102,241,0.9); } }
 
         .live-metrics-compact { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+        .live-analysis-card { overflow-y: auto; min-height: 0; }
+        .live-analysis-card::-webkit-scrollbar { width: 4px; }
+        .live-analysis-card::-webkit-scrollbar-thumb { background: #30363d; border-radius: 10px; }
         .l-metric { background: #161b22; padding: 1rem; border-radius: 16px; border: 1px solid #30363d; }
         .l-metric label { font-size: 0.65rem; font-weight: 800; color: #8b949e; display: block; margin-bottom: 0.3rem; }
         .l-val { font-size: 1.6rem; font-weight: 800; color: #fff; }

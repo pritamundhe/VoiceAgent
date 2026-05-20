@@ -53,6 +53,21 @@ const UserSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+
+  /**
+   * Learning-path completion records.
+   * Each entry is written once when the user first passes a module.
+   * Re-attempts update bestScore / attempts in-place rather than
+   * pushing a new entry, keeping the array compact.
+   */
+  completedModules: [
+    {
+      moduleId:  { type: String },   // e.g. "1a", "3c"
+      passedAt:  { type: Date },
+      bestScore: { type: Number },   // highest score ever achieved
+      attempts:  { type: Number },   // total attempts including first pass
+    },
+  ],
 }, { timestamps: true });
 
 // Password hashing middleware
