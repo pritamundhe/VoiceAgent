@@ -17,49 +17,60 @@ const MODE_CONTEXTS = {
 
 export async function POST(request) {
     try {
-        const { question, answer, followUpCount = 0, mode = '', modeTitle = '', part = '' } = await request.json();
+        const { question, answer, followUpCount = 0, mode = '', modeTitle = '', part = '', chatHistory = [], nextQuestion = null } = await request.json();
 
         if (!question || !answer || answer.trim().length < 3) {
             return Response.json({
                 satisfied: false,
-                followUp: "I didn't catch that. Could you try answering again?"
+                aiResponse: "I didn't quite catch that. Could you try answering again?"
             });
         }
 
-        const context = MODE_CONTEXTS[mode] || `${modeTitle || 'speaking'} exercise. Evaluate if the response is relevant and substantive.`;
+        const context = MODE_CONTEXTS[mode] || `${modeTitle || 'speaking'} exercise.`;
+        
+        const historyText = chatHistory.length > 0 
+            ? chatHistory.slice(-4).map(m => `${m.role === 'ai' ? 'Coach' : 'User'}: ${m.content}`).join('\n') 
+            : 'No prior history.';
 
-        let prompt = `You are evaluating a student's spoken response in a ${context}
+        let prompt = `You are a conversational speaking coach conducting a ${context}
 
-Prompt/Scenario: "${question}"
-Student's Response: "${answer}"
+Current Question / Topic: "${question}"
+Student's Latest Answer: "${answer}"
+Conversation History (last few turns):
+${historyText}
+
 Follow-up attempt number: ${followUpCount}
 
 Criteria for SATISFIED:
-- Response is relevant to the prompt/scenario
-- Has at least 2-3 sentences or meaningful content (not just 1-2 words)
-- Shows some thought, effort, or attempt at the task
+- Response is relevant to the question
+- Has at least 2-3 sentences or meaningful content
+- Shows effort
 
-If NOT satisfied, write an encouraging follow-up that helps them give a better answer.
-The follow-up should be warm, specific to the prompt, and under 20 words.
+TASK:
+1. Determine if you are SATISFIED with the answer.
+2. Write your next spoken response (aiResponse).
+
+If NOT satisfied:
+Your \`aiResponse\` should be an encouraging, natural follow-up asking them to elaborate or try again. (Under 20 words).
+
+If SATISFIED:
+Your \`aiResponse\` should acknowledge their good answer naturally (e.g., "That's a great point about X.") AND seamlessly ask them the next question in the queue.
+Next Question to ask: ${nextQuestion ? `"${nextQuestion}"` : "None. Congratulate them on finishing."}
 
 Output ONLY valid JSON, nothing else:
-{"satisfied": true, "followUp": null}
-OR
-{"satisfied": false, "followUp": "Your encouraging follow-up here"}`;
+{"satisfied": boolean, "aiResponse": "Your spoken text here"}`;
 
         if (part === 'listening') {
             prompt = `You are evaluating a student's spoken response to a listening exercise.
 
 Original Audio Transcript: "${question}"
 Student's Response: "${answer}"
-Follow-up attempt number: ${followUpCount}
 
 Criteria for SATISFIED:
-- The student's response accurately reflects the meaning, summary, or exact dictation of the original audio transcript.
-- It is an appropriate and correct response to the listening audio.
+- The student's response accurately reflects the meaning of the original audio transcript.
 
-If SATISFIED, output {"satisfied": true, "followUp": "Correct!"}
-If NOT satisfied, output an encouraging follow-up (under 20 words) explaining they missed the mark: {"satisfied": false, "followUp": "Not quite! Listen closely and try again."}
+If SATISFIED, output {"satisfied": true, "aiResponse": "Correct! Let's move on to the next one."}
+If NOT satisfied, output {"satisfied": false, "aiResponse": "Not quite! Listen closely and try again."}
 
 Output ONLY valid JSON, nothing else.`;
         } else if (part === 'reading') {
@@ -67,13 +78,12 @@ Output ONLY valid JSON, nothing else.`;
 
 Text to Read: "${question}"
 Student's Spoken Response: "${answer}"
-Follow-up attempt number: ${followUpCount}
 
 Criteria for SATISFIED:
-- The student's spoken response closely matches the text they were supposed to read. Minor pronunciation errors or one or two missed words are okay, but the core text must be read correctly.
+- The student's spoken response closely matches the text they were supposed to read.
 
-If SATISFIED, output {"satisfied": true, "followUp": "Excellent reading!"}
-If NOT satisfied, output an encouraging follow-up (under 20 words) explaining they missed some words: {"satisfied": false, "followUp": "You missed a few words. Let's try reading it again."}
+If SATISFIED, output {"satisfied": true, "aiResponse": "Excellent reading! Next one."}
+If NOT satisfied, output {"satisfied": false, "aiResponse": "You missed a few words. Let's try reading it again."}
 
 Output ONLY valid JSON, nothing else.`;
         }
@@ -82,10 +92,14 @@ Output ONLY valid JSON, nothing else.`;
         const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
         const result = JSON.parse(cleanJson);
 
+        // Fallback mapping for older prompts just in case
+        if (result.followUp && !result.aiResponse) {
+            result.aiResponse = result.followUp;
+        }
+
         return Response.json(result);
     } catch (error) {
         console.error('Evaluate answer error:', error);
-        // On error, be lenient and move on
-        return Response.json({ satisfied: true, followUp: null });
+        return Response.json({ satisfied: true, aiResponse: "Great! Let's continue." });
     }
 }

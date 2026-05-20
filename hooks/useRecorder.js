@@ -65,6 +65,7 @@ export default function useRecorder(mode = '', prompt = '', taskType = '', hasQu
     const startTimeRef = useRef(null);
     const durationIntervalRef = useRef(null);
     const pauseTimeoutRef = useRef(null);
+    const pauseFiredRef = useRef(false);
     const analyserRef = useRef(null);
     const lastAudioTimeRef = useRef(Date.now());
     
@@ -469,32 +470,56 @@ export default function useRecorder(mode = '', prompt = '', taskType = '', hasQu
         }
     }, [fallbackTTS]);
 
-    // 6-second Pause Trigger
-    // Interview mode manages its own evaluation on recording stop — skip the pause trigger for it
+    // ── Silence-based AI trigger (polls audio energy every 300 ms) ───────────
+    // Fires after 3 s of real audio silence (not transcript-change based).
+    // Non-queue mode  → sends transcript to AI chat feedback.
+    // Queue mode      → auto-stops recording so the evaluation pipeline fires.
+    // Task modes (repeat/short/fitb) manage their own evaluation — skipped here.
+    const SILENCE_THRESHOLD_MS = 3000;
+
     useEffect(() => {
-        if (!isRecording || !transcript.trim()) return;
+        if (!isRecording) {
+            pauseFiredRef.current = false;
+            return;
+        }
         const isTaskMode = taskType === 'repeat' || taskType === 'short' || taskType?.includes('fitb');
         if (isTaskMode) return;
-        if (hasQueue) return; // All queue modes handle evaluation on recording stop
 
-        if (pauseTimeoutRef.current) clearTimeout(pauseTimeoutRef.current);
-        
-        pauseTimeoutRef.current = setTimeout(() => {
-            const currentText = transcript;
-            setChatHistory(prev => [...prev, { role: 'user', content: currentText.trim() }]);
-            setTranscript('');
-            committedTurnsRef.current = [];
-            lastTurnTextRef.current = '';
-            
-            if (taskType !== 'repeat') {
-                fetchAiFeedback(currentText, mode, prompt);
+        const pollingInterval = setInterval(() => {
+            const silenceDuration = Date.now() - lastAudioTimeRef.current;
+
+            // User spoke again — reset so we can fire next time they pause
+            if (silenceDuration < 500) {
+                pauseFiredRef.current = false;
+                return;
             }
-        }, 6000);
 
-        return () => {
-            if (pauseTimeoutRef.current) clearTimeout(pauseTimeoutRef.current);
-        };
-    }, [transcript, isRecording, fetchAiFeedback, mode, prompt, taskType]);
+            // Build current text from refs (avoids stale closure on transcript state)
+            const liveText = [...committedTurnsRef.current, lastTurnTextRef.current]
+                .join(' ').trim();
+
+            if (!liveText || pauseFiredRef.current) return;
+
+            if (silenceDuration >= SILENCE_THRESHOLD_MS) {
+                pauseFiredRef.current = true;
+
+                if (hasQueue) {
+                    // Queue mode: auto-stop → wasRecordingRef effect in dashboard triggers evaluation
+                    cleanup();
+                } else {
+                    // Free / freestyle mode: call AI chat feedback
+                    const capturedText = liveText;
+                    setChatHistory(prev => [...prev, { role: 'user', content: capturedText }]);
+                    setTranscript('');
+                    committedTurnsRef.current = [];
+                    lastTurnTextRef.current = '';
+                    fetchAiFeedback(capturedText, mode, prompt);
+                }
+            }
+        }, 300);
+
+        return () => clearInterval(pollingInterval);
+    }, [isRecording, hasQueue, fetchAiFeedback, mode, prompt, taskType, cleanup]);
 
     return {
         isRecording,

@@ -17,6 +17,44 @@ const MicIcon = () => (
     </svg>
 );
 
+// ── Live annotation word lists ─────────────────────────────────────────────────────
+const FILLER_WORDS_LIVE = new Set(['um', 'uh', 'like', 'actually', 'basically']);
+const STOP_WORDS_LIVE = new Set([
+    'a','an','the','and','but','or','nor','so','for','yet','at','by','from','in',
+    'into','of','on','to','up','as','is','are','was','were','be','been','being',
+    'has','have','had','do','does','did','will','would','could','should','may',
+    'might','this','that','these','those','it','its','i','me','my','we','you',
+    'your','he','she','they','them','their','what','which','who','when','where',
+    'with','about','through','before','after','here','there','then','than',
+]);
+
+function renderAnnotatedLive(text, isPartial = false) {
+    if (!text) return null;
+    const tokens = text.split(/(\s+)/);
+    return tokens.map((token, i) => {
+        if (/^\s+$/.test(token)) return <span key={i}>{token}</span>;
+        const clean = token.toLowerCase().replace(/[.,!?;:'"()\-]/g, '');
+        if (FILLER_WORDS_LIVE.has(clean)) {
+            return (
+                <span key={i} style={{
+                    background: 'rgba(255,107,107,0.22)', color: '#ff6b6b',
+                    padding: '1px 5px', borderRadius: '4px', fontWeight: 700,
+                    fontSize: '0.95em', opacity: isPartial ? 0.65 : 1
+                }} title="Filler word">{token}</span>
+            );
+        }
+        if (STOP_WORDS_LIVE.has(clean)) {
+            return (
+                <span key={i} style={{
+                    color: '#555d6b', borderBottom: '1px dashed #30363d',
+                    opacity: isPartial ? 0.45 : 0.75
+                }} title="Stop word">{token}</span>
+            );
+        }
+        return <span key={i} style={{ opacity: isPartial ? 0.6 : 1 }}>{token}</span>;
+    });
+}
+
 function DashboardContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
@@ -175,6 +213,11 @@ function DashboardContent() {
         setIsEvaluating(true);
         setPendingEvalTranscript(null);
 
+        const nextIdx = currentPromptIndex + 1;
+        const nextQuestion = nextIdx < promptQueue.length 
+            ? (typeof promptQueue[nextIdx] === 'object' ? promptQueue[nextIdx].q : promptQueue[nextIdx]) 
+            : null;
+
         (async () => {
             try {
                 const res = await fetch('/api/evaluate-answer', {
@@ -186,28 +229,80 @@ function DashboardContent() {
                         followUpCount,
                         mode,
                         modeTitle: selectedMode?.title || customTitle || '',
-                        part
+                        part,
+                        chatHistory,
+                        nextQuestion
                     })
                 });
                 const data = await res.json();
 
+                // Custom TTS player that handles the sequence and auto-resumes microphone
+                const playSequenceAndResume = async (msg1, msg2, shouldResume) => {
+                    setIsPlayingAudio(true);
+                    try {
+                        const playText = async (txt) => {
+                            const ttsRes = await fetch('/api/tts', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ text: txt })
+                            });
+                            if (!ttsRes.ok) return;
+                            const blob = await ttsRes.blob();
+                            const url = URL.createObjectURL(blob);
+                            if (audioRef.current) audioRef.current.pause();
+                            const audio = new Audio(url);
+                            audioRef.current = audio;
+                            return new Promise((resolve) => {
+                                audio.onended = resolve;
+                                audio.onerror = resolve;
+                                audio.play().catch(resolve);
+                            });
+                        };
+                        
+                        if (msg1) await playText(msg1);
+                        if (msg2) {
+                            await new Promise(r => setTimeout(r, 400)); // small pause between sentences
+                            await playText(msg2);
+                        }
+                    } catch (err) {
+                        console.error('TTS error', err);
+                    } finally {
+                        setIsPlayingAudio(false);
+                        if (shouldResume && !isRecording) {
+                            // Auto-resume microphone!
+                            startRecording();
+                        }
+                    }
+                };
+
                 if (data.satisfied) {
                     setCompletedIndices(prev => new Set([...prev, currentPromptIndex]));
                     setFollowUpCount(0);
-                    const nextIdx = currentPromptIndex + 1;
+                    
                     if (nextIdx < promptQueue.length) {
-                        addChatMessage('ai', `✅ Great response! Here comes question ${nextIdx + 1} of ${promptQueue.length}.`);
-                        setTimeout(() => {
-                            setCurrentPromptIndex(nextIdx);
-                            setCurrentPrompt(promptQueue[nextIdx]);
-                        }, 700);
+                        const successMsg = data.aiResponse || `Great response!`;
+                        addChatMessage('ai', successMsg);
+                        
+                        const nextQ = promptQueue[nextIdx];
+                        
+                        setCurrentPromptIndex(nextIdx);
+                        setCurrentPrompt(nextQ);
+                        
+                        // Speak success, which now intrinsically contains the next question transition!
+                        playSequenceAndResume(successMsg, null, true);
                     } else {
-                        addChatMessage('ai', `🎉 Outstanding! You've completed all ${promptQueue.length} questions. Generating your report...`);
-                        setTimeout(() => handleEndSession(), 1600);
+                        const msg = data.aiResponse || `Outstanding! You've completed all questions. Generating your report.`;
+                        addChatMessage('ai', msg);
+                        playSequenceAndResume(msg, null, false).then(() => {
+                            handleEndSession();
+                        });
                     }
                 } else {
                     setFollowUpCount(prev => prev + 1);
-                    addChatMessage('ai', data.followUp || 'Can you elaborate a bit more on that?');
+                    const followUpMsg = data.aiResponse || data.followUp || 'Can you elaborate a bit more on that?';
+                    addChatMessage('ai', followUpMsg);
+                    // Speak the follow-up, then auto-resume recording so the user can answer
+                    playSequenceAndResume(followUpMsg, null, true);
                 }
             } catch (err) {
                 console.error('Evaluation error:', err);
@@ -638,20 +733,48 @@ function DashboardContent() {
                         <div className="transcript-area">
                             {/* Live speech — always shown at very top */}
                             {(transcript || currentTurn) && (
-                                <div className="msg user active">
-                                    <label>YOU (SPEAKING)</label>
-                                    <p>
-                                        {transcript}
-                                        <span className="partial">{currentTurn}</span>
-                                    </p>
+                                <div className="msg user active" style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                                    <div style={{ fontSize: '1.5rem', background: 'rgba(105,219,124,0.1)', padding: '0.4rem', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>👤</div>
+                                    <div style={{ flex: 1 }}>
+                                        <label>YOU (SPEAKING)</label>
+                                        <p style={{ lineHeight: 1.75 }}>
+                                            {renderAnnotatedLive(transcript)}
+                                            {renderAnnotatedLive(currentTurn, true)}
+                                        </p>
+                                        {/* Legend */}
+                                        <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                                            <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#ff6b6b', background: 'rgba(255,107,107,0.12)', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>● Filler</span>
+                                            <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#555d6b', borderBottom: '1px dashed #30363d', paddingBottom: '0px' }}>__ Stop Word</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Typing Indicator if AI is evaluating */}
+                            {isEvaluating && (
+                                <div className="msg ai" style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                                    <div style={{ fontSize: '1.5rem', background: 'rgba(68,147,248,0.1)', padding: '0.4rem', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: 'drop-shadow(0 0 5px rgba(68,147,248,0.3))' }}>🤖</div>
+                                    <div style={{ flex: 1 }}>
+                                        <label>AI COACH</label>
+                                        <div style={{ display: 'flex', gap: '5px', marginTop: '10px' }}>
+                                            <span style={{ width: '6px', height: '6px', background: '#4493f8', borderRadius: '50%', animation: 'blink 1.4s infinite both', animationDelay: '0s' }} />
+                                            <span style={{ width: '6px', height: '6px', background: '#4493f8', borderRadius: '50%', animation: 'blink 1.4s infinite both', animationDelay: '0.2s' }} />
+                                            <span style={{ width: '6px', height: '6px', background: '#4493f8', borderRadius: '50%', animation: 'blink 1.4s infinite both', animationDelay: '0.4s' }} />
+                                        </div>
+                                    </div>
                                 </div>
                             )}
 
                             {/* Chat history reversed — newest first */}
                             {[...chatHistory].reverse().map((m, i) => (
-                                <div key={i} className={`msg ${m.role}`}>
-                                    <label>{m.role === 'ai' ? 'AI COACH' : 'YOU'}</label>
-                                    <p>{m.content}</p>
+                                <div key={i} className={`msg ${m.role}`} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                                    <div style={{ fontSize: '1.5rem', background: m.role === 'ai' ? 'rgba(68,147,248,0.1)' : 'rgba(105,219,124,0.1)', padding: '0.4rem', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        {m.role === 'ai' ? '🤖' : '👤'}
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <label>{m.role === 'ai' ? 'AI COACH' : 'YOU'}</label>
+                                        <p style={{ lineHeight: 1.6 }}>{m.content}</p>
+                                    </div>
                                 </div>
                             ))}
 
